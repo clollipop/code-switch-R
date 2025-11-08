@@ -6,7 +6,7 @@
         <key>CFBundleName</key>
             <string>Code Switch</string>
         <key>CFBundleExecutable</key>
-            <string>codeswitch</string>
+            <string>CodeSwitch</string>
         <key>CFBundleIdentifier</key>
             <string>com.codeswitch.app</string>
         <key>CFBundleVersion</key>

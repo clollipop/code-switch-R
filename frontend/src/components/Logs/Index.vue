@@ -561,6 +561,23 @@ onUnmounted(() => {
   color: #94a3b8;
 }
 
+html.dark .summary-card {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: radial-gradient(circle at top, rgba(148, 163, 184, 0.2), rgba(15, 23, 42, 0.35));
+}
+
+html.dark .summary-card__label {
+  color: rgba(248, 250, 252, 0.75);
+}
+
+html.dark .summary-card__value {
+  color: rgba(248, 250, 252, 0.95);
+}
+
+html.dark .summary-card__hint {
+  color: rgba(186, 194, 210, 0.8);
+}
+
 @media (max-width: 768px) {
   .logs-summary {
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

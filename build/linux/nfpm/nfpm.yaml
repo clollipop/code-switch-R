@@ -3,7 +3,7 @@
 #
 # The lines below are called `modelines`. See `:help modeline`
 
-name: "codeswitch"
+name: "CodeSwitch"
 arch: ${GOARCH}
 platform: "linux"
 version: "0.1.0"
@@ -17,12 +17,12 @@ license: "MIT"
 release: "1"
 
 contents:
-  - src: "./bin/codeswitch"
-    dst: "/usr/local/bin/codeswitch"
+  - src: "./bin/CodeSwitch"
+    dst: "/usr/local/bin/CodeSwitch"
   - src: "./build/appicon.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/codeswitch.png"
-  - src: "./build/linux/codeswitch.desktop"
-    dst: "/usr/share/applications/codeswitch.desktop"
+    dst: "/usr/share/icons/hicolor/128x128/apps/CodeSwitch.png"
+  - src: "./build/linux/CodeSwitch.desktop"
+    dst: "/usr/share/applications/CodeSwitch.desktop"
 
 # Default dependencies for Debian 12/Ubuntu 22.04+ with WebKit 4.1
 depends:

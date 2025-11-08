@@ -44,10 +44,7 @@ The macOS app bundle is generated at `./bin/codeswitch.app`.
    ```
 3. Build Windows binaries from macOS using the Windows task:
    ```bash
-   env GOOS=windows GOARCH=amd64 CGO_ENABLED=1 \
-     CC=x86_64-w64-mingw32-gcc \
-     CXX=x86_64-w64-mingw32-g++ \
-     wails3 task windows:build
+   wails3 task windows:build ARCH=amd64
    ```
    - Output: `./bin/codeswitch.exe` + supporting files.
    - To produce the NSIS installer, run the `windows:package` task with the same environment variables.
@@ -57,14 +54,23 @@ The macOS app bundle is generated at `./bin/codeswitch.app`.
 Use the helper script to build and upload assets to GitHub Releases (requires the `gh` CLI):
 
 ```bash
-# Build macOS bundle + Windows binary, then create release v0.1.0
-WINDOWS_BUILD=1 scripts/publish_release.sh v0.1.0 RELEASE_NOTES.md
+# Build macOS .app + Windows installer and publish (defaults to v0.1.0 / RELEASE_NOTES.md)
+scripts/publish_release.sh
 ```
 
 The script:
 - runs `wails3 task common:update:build-assets`
-- builds macOS (`bin/codeswitch.app`) and optional Windows (`bin/codeswitch.exe`) artifacts
-- calls `gh release create` with the supplied tag and notes file
+- builds macOS (`bin/codeswitch.app`) via `wails3 task package`
+- cross-compiles + packages Windows installer (`bin/codeswitch-*-installer.exe`) via `windows:package`
+- zips `codeswitch.app` into `codeswitch-macos.zip`, then uploads zip + installer to GitHub Releases
+
+Want to run the steps manually? Execute:
+
+```bash
+wails3 task package
+wails3 task windows:package ARCH=amd64
+ditto -c -k --sequesterRsrc --keepParent bin/codeswitch.app bin/codeswitch-macos.zip
+```
 
 ## Packaging Notes
 

@@ -5,7 +5,7 @@
 !include "FileFunc.nsh"
 
 !ifndef INFO_PROJECTNAME
-    !define INFO_PROJECTNAME "codeswitch"
+    !define INFO_PROJECTNAME "CodeSwitch"
 !endif
 !ifndef INFO_COMPANYNAME
     !define INFO_COMPANYNAME "Code Switch"

@@ -1006,6 +1006,10 @@ html.dark .mac-sidebar-item:hover {
   font-variant-numeric: tabular-nums;
 }
 
+html.dark .card-metrics {
+  color: rgba(255, 255, 255, 0.75);
+}
+
 html.dark .card-meta {
   color: rgba(255, 255, 255, 0.6);
 }
