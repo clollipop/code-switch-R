@@ -7,9 +7,14 @@ import ThemeSetting from '../Setting/ThemeSetting.vue'
 import { fetchAppSettings, saveAppSettings, type AppSettings } from '../../services/appSettings'
 
 const router = useRouter()
-const heatmapEnabled = ref(true)
-const homeTitleVisible = ref(true)
-const autoStartEnabled = ref(true)
+// 从 localStorage 读取缓存值作为初始值，避免加载时的视觉闪烁
+const getCachedValue = (key: string, defaultValue: boolean): boolean => {
+  const cached = localStorage.getItem(`app-settings-${key}`)
+  return cached !== null ? cached === 'true' : defaultValue
+}
+const heatmapEnabled = ref(getCachedValue('heatmap', true))
+const homeTitleVisible = ref(getCachedValue('homeTitle', true))
+const autoStartEnabled = ref(getCachedValue('autoStart', false))
 const settingsLoading = ref(true)
 const saveBusy = ref(false)
 
@@ -23,12 +28,17 @@ const loadAppSettings = async () => {
     const data = await fetchAppSettings()
     heatmapEnabled.value = data?.show_heatmap ?? true
     homeTitleVisible.value = data?.show_home_title ?? true
-    autoStartEnabled.value = data?.auto_start ?? true
+    autoStartEnabled.value = data?.auto_start ?? false
+
+    // 缓存到 localStorage，下次打开时直接显示正确状态
+    localStorage.setItem('app-settings-heatmap', String(heatmapEnabled.value))
+    localStorage.setItem('app-settings-homeTitle', String(homeTitleVisible.value))
+    localStorage.setItem('app-settings-autoStart', String(autoStartEnabled.value))
   } catch (error) {
     console.error('failed to load app settings', error)
     heatmapEnabled.value = true
     homeTitleVisible.value = true
-    autoStartEnabled.value = true
+    autoStartEnabled.value = false
   } finally {
     settingsLoading.value = false
   }
@@ -44,6 +54,12 @@ const persistAppSettings = async () => {
       auto_start: autoStartEnabled.value,
     }
     await saveAppSettings(payload)
+
+    // 更新缓存
+    localStorage.setItem('app-settings-heatmap', String(heatmapEnabled.value))
+    localStorage.setItem('app-settings-homeTitle', String(homeTitleVisible.value))
+    localStorage.setItem('app-settings-autoStart', String(autoStartEnabled.value))
+
     window.dispatchEvent(new CustomEvent('app-settings-updated'))
   } catch (error) {
     console.error('failed to save app settings', error)
