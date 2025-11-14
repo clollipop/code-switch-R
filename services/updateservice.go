@@ -383,7 +383,7 @@ func (us *UpdateService) applyUpdateLinux(appImagePath string) error {
 	_ = os.Rename(currentExe, backupPath)
 
 	// 复制新文件
-	if err := copyFile(appImagePath, currentExe); err != nil {
+	if err := copyUpdateFile(appImagePath, currentExe); err != nil {
 		// 恢复备份
 		_ = os.Rename(backupPath, currentExe)
 		return fmt.Errorf("复制新文件失败: %w", err)
@@ -650,8 +650,8 @@ func (us *UpdateService) LoadState() error {
 	return nil
 }
 
-// copyFile 复制文件
-func copyFile(src, dst string) error {
+// copyUpdateFile 复制更新文件
+func copyUpdateFile(src, dst string) error {
 	source, err := os.Open(src)
 	if err != nil {
 		return err
