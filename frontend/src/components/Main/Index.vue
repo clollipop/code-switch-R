@@ -660,7 +660,6 @@ import ModelWhitelistEditor from '../common/ModelWhitelistEditor.vue'
 import ModelMappingEditor from '../common/ModelMappingEditor.vue'
 import { LoadProviders, SaveProviders, DuplicateProvider } from '../../../bindings/codeswitch/services/providerservice'
 import { GetProviders as GetGeminiProviders, UpdateProvider as UpdateGeminiProvider } from '../../../bindings/codeswitch/services/geminiservice'
-import type { GeminiProvider } from '../../../bindings/codeswitch/services/geminiservice'
 import { fetchProxyStatus, enableProxy, disableProxy } from '../../services/claudeSettings'
 import { fetchGeminiProxyStatus, enableGeminiProxy, disableGeminiProxy } from '../../services/geminiSettings'
 import { fetchHeatmapStats, fetchProviderDailyStats, type ProviderDailyStat } from '../../services/logs'
@@ -1004,6 +1003,23 @@ const loadUsageHeatmap = async () => {
 	} catch (error) {
 		console.error('Failed to load usage heatmap stats', error)
 	}
+}
+
+// 本地 GeminiProvider 类型定义（避免依赖 CI 生成的 bindings）
+interface GeminiProvider {
+  id: string
+  name: string
+  websiteUrl?: string
+  apiKeyUrl?: string
+  baseUrl?: string
+  apiKey?: string
+  model?: string
+  description?: string
+  category?: string
+  partnerPromotionKey?: string
+  enabled: boolean
+  envConfig?: Record<string, string>
+  settingsConfig?: Record<string, any>
 }
 
 const tabs = [
