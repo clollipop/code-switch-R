@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/daodao97/xgo/xdb"
@@ -576,15 +577,32 @@ func (bs *BlacklistService) AutoRecoverExpired() error {
 			continue // 未过期，跳过
 		}
 
-		// 标记为已恢复（保留历史记录）
-		_, err = db.Exec(`
-			UPDATE provider_blacklist
-			SET auto_recovered = 1, failure_count = 0
-			WHERE platform = ? AND provider_name = ?
-		`, platform, providerName)
+		// 标记为已恢复（保留历史记录），使用重试机制避免 SQLITE_BUSY
+		var updateErr error
+		for retry := 0; retry < 3; retry++ {
+			_, updateErr = db.Exec(`
+				UPDATE provider_blacklist
+				SET auto_recovered = 1, failure_count = 0
+				WHERE platform = ? AND provider_name = ?
+			`, platform, providerName)
 
-		if err != nil {
-			log.Printf("⚠️  标记恢复状态失败: %s/%s - %v", platform, providerName, err)
+			if updateErr == nil {
+				break // 成功，跳出重试循环
+			}
+
+			// 如果是SQLITE_BUSY错误，等待后重试
+			if strings.Contains(updateErr.Error(), "SQLITE_BUSY") || strings.Contains(updateErr.Error(), "database is locked") {
+				time.Sleep(time.Duration(50*(retry+1)) * time.Millisecond) // 50ms, 100ms, 150ms
+				continue
+			}
+
+			// 其他错误直接退出
+			break
+		}
+
+		if updateErr != nil {
+			// 失败不影响主流程，下次定时器会再试
+			log.Printf("⚠️  标记恢复状态失败（已重试3次）: %s/%s - %v，将在下次定时器重试", platform, providerName, updateErr)
 			continue
 		}
 
