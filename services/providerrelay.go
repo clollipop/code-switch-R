@@ -394,6 +394,14 @@ func (prs *ProviderRelayService) forwardRequest(
 		return false, resp.Error()
 	}
 
+	// 特殊处理：某些 provider 的非流式请求可能返回状态码 0，但实际上是成功的
+	// 如果状态码为 0 且没有错误，当作成功处理
+	if status == 0 {
+		fmt.Printf("[WARN] Provider %s 返回状态码 0，但无错误，当作成功处理\n", provider.Name)
+		_, copyErr := resp.ToHttpResponseWriter(c.Writer, ReqeustLogHook(c, kind, requestLog))
+		return copyErr == nil, copyErr
+	}
+
 	if status >= http.StatusOK && status < http.StatusMultipleChoices {
 		_, copyErr := resp.ToHttpResponseWriter(c.Writer, ReqeustLogHook(c, kind, requestLog))
 		return copyErr == nil, copyErr

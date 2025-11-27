@@ -87,6 +87,7 @@ func main() {
 	speedTestService := services.NewSpeedTestService()
 	dockService := dock.New()
 	versionService := NewVersionService()
+	consoleService := services.NewConsoleService()
 
 	// 应用待处理的更新
 	go func() {
@@ -153,6 +154,7 @@ func main() {
 			application.NewService(dockService),
 			application.NewService(versionService),
 			application.NewService(geminiService),
+			application.NewService(consoleService),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

@@ -7,6 +7,7 @@ import SkillPage from '../components/Skill/Index.vue'
 import PromptsPage from '../components/Prompts/Index.vue'
 import SpeedTestPage from '../components/SpeedTest/Index.vue'
 import EnvCheckPage from '../components/EnvCheck/Index.vue'
+import ConsolePage from '../components/Console/Index.vue'
 
 const routes = [
   { path: '/', component: MainPage },
@@ -16,6 +17,7 @@ const routes = [
   { path: '/speedtest', component: SpeedTestPage },
   { path: '/env', component: EnvCheckPage },
   { path: '/logs', component: LogsPage },
+  { path: '/console', component: ConsolePage },
   { path: '/settings', component: GeneralPage },
 ]
 

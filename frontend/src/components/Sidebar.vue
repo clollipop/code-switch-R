@@ -69,6 +69,7 @@ const navItems: NavItem[] = [
   { path: '/speedtest', icon: 'zap', labelKey: 'sidebar.speedtest', isNew: true },
   { path: '/env', icon: 'search', labelKey: 'sidebar.env', isNew: true },
   { path: '/logs', icon: 'bar-chart', labelKey: 'sidebar.logs' },
+  { path: '/console', icon: 'terminal', labelKey: 'sidebar.console' },
   { path: '/settings', icon: 'settings', labelKey: 'sidebar.settings' },
 ]
 
@@ -146,6 +147,12 @@ const navigate = (path: string) => {
           <line x1="6" y1="20" x2="6" y2="16"></line>
         </svg>
 
+        <!-- Terminal -->
+        <svg v-else-if="item.icon === 'terminal'" class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="4 17 10 11 4 5"></polyline>
+          <line x1="12" y1="19" x2="20" y2="19"></line>
+        </svg>
+
         <!-- Settings -->
         <svg v-else-if="item.icon === 'settings'" class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3"></circle>
@@ -158,7 +165,7 @@ const navigate = (path: string) => {
     </div>
 
     <div class="sidebar-footer" v-if="!isCollapsed">
-      <span class="version">v1.1.12</span>
+      <span class="version">v1.1.13</span>
     </div>
   </nav>
 </template>

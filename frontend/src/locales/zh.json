@@ -17,6 +17,7 @@
     "speedtest": "测速",
     "env": "环境",
     "logs": "日志",
+    "console": "控制台",
     "settings": "设置"
   },
   "prompts": {

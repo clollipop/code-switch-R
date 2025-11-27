@@ -17,6 +17,7 @@
     "speedtest": "Speed Test",
     "env": "Env Check",
     "logs": "Logs",
+    "console": "Console",
     "settings": "Settings"
   },
   "prompts": {
