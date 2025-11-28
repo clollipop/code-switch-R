@@ -331,6 +331,9 @@ onMounted(() => {
 
 .platform-tab {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 10px 16px;
   border: none;
   background: transparent;

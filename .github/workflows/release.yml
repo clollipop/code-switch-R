@@ -159,41 +159,24 @@ jobs:
         with:
           files: release-assets/*
           body: |
-            ## ✨ 新功能
+            ## 🔧 功能优化
 
-            ### 应用自动更新
-            - 新增自动更新功能，支持一键更新到最新版本
-            - 每天 8:00 AM 自动检查 GitHub Release 更新
-            - 网络异常时自动重试 3 次（每次间隔 5 分钟）
-            - 智能重启机制：下载更新后在下次启动时自动应用
-
-            ### 设置界面增强
-            - 设置页面新增"应用更新"板块
-            - 可查看当前版本、最新版本和上次检查时间
-            - 支持手动检查更新和立即下载安装
-            - 提供自动更新开关，状态持久化保存
-
-            ### UI 改进
-            - 主页 GitHub 图标显示更新状态徽章
-              - 🔵 蓝色 "New" 徽章：有新版本可用
-              - 🟡 黄色进度徽章：正在下载更新
-              - 🟢 绿色 "Ready" 徽章（脉冲动画）：更新已就绪，点击重启
-            - 完善中英文国际化翻译
-
-            ## 🔧 技术改进
-            - 新增 UpdateService 后端服务（400+ 行）
-            - 版本号管理服务，当前版本 v0.2.6
-            - 状态持久化到 ~/.code-switch/update-state.json
-            - 依赖更新：github.com/hashicorp/go-version v1.7.0
+            ### 拉黑模式行为改进
+            - **拉黑功能开启时**：只使用第一个未被拉黑的 Provider，失败直接返回错误（不自动降级）
+            - **拉黑功能关闭时**：保持自动降级行为，失败自动尝试下一个 Provider
+            - 这样可以更精确地控制 Provider 使用策略，避免不必要的降级
 
             ## 🐛 Bug 修复
-            - 修复"立即检查"按钮文字换行问题
-            - 修复 copyFile 函数重名冲突
 
-            ## ✨ UI 改进
-            - 新增主页刷新按钮（一键刷新所有数据）
-            - 添加刷新按钮旋转动画效果
-            - 完善按钮样式和禁用状态
+            ### 等级拉黑开关修复
+            - 修复等级拉黑开关不生效的问题
+            - 原因：UI 开关写入数据库，但服务从 JSON 文件读取，数据源不一致
+            - 现在开关状态统一从数据库读取，与 UI 设置保持同步
+
+            ### UI 修复
+            - 修复提示词管理页面 Tab 文字不居中的问题
+            - 修复环境变量检测页面 Tab 文字不居中的问题
+            - 修复前端模块导入路径问题（CI 构建失败）
 
             ## 📦 安装说明
 
@@ -201,7 +184,7 @@ jobs:
             - **macOS (Apple Silicon)**：下载 `codeswitch-macos-arm64.zip`，解压后拖入 Applications 文件夹
             - **macOS (Intel)**：下载 `codeswitch-macos-amd64.zip`，解压后拖入 Applications 文件夹
 
-            **完整更新日志**: https://github.com/Rogers-F/code-switch-R/compare/v0.2.4...v0.2.6
+            **完整更新日志**: https://github.com/Rogers-F/code-switch-R/compare/v1.1.19...v1.1.20
           draft: false
           prerelease: false
         env:

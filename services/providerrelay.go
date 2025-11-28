@@ -233,11 +233,83 @@ func (prs *ProviderRelayService) proxyHandler(kind string, endpoint string) gin.
 		query := flattenQuery(c.Request.URL.Query())
 		clientHeaders := cloneHeaders(c.Request.Header)
 
-		// 【修复】实现完整的故障切换逻辑：
-		// 1. 按 Level 升序遍历（Level 1 → Level 2 → ...）
-		// 2. 同一 Level 内按顺序尝试每个 provider
-		// 3. 任意一个成功即返回，失败则尝试下一个
-		// 4. 所有 provider 都失败才返回 502
+		// 获取拉黑功能开关状态
+		blacklistEnabled := prs.blacklistService.IsLevelBlacklistEnabled()
+
+		// 【拉黑模式】：只尝试第一个 provider，失败直接返回错误（不自动降级）
+		// 只有当 provider 被拉黑后，下次请求才会自动使用下一个
+		if blacklistEnabled {
+			fmt.Printf("[INFO] 🔒 拉黑模式已开启，禁用自动降级\n")
+
+			// 找到第一个 provider（按 Level 升序）
+			var firstProvider *Provider
+			var firstLevel int
+			for _, level := range levels {
+				if len(levelGroups[level]) > 0 {
+					p := levelGroups[level][0]
+					firstProvider = &p
+					firstLevel = level
+					break
+				}
+			}
+
+			if firstProvider == nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "no providers available"})
+				return
+			}
+
+			// 获取实际模型名
+			effectiveModel := firstProvider.GetEffectiveModel(requestedModel)
+			currentBodyBytes := bodyBytes
+			if effectiveModel != requestedModel && requestedModel != "" {
+				fmt.Printf("[INFO] Provider %s 映射模型: %s -> %s\n", firstProvider.Name, requestedModel, effectiveModel)
+				modifiedBody, err := ReplaceModelInRequestBody(bodyBytes, effectiveModel)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("模型映射失败: %v", err)})
+					return
+				}
+				currentBodyBytes = modifiedBody
+			}
+
+			fmt.Printf("[INFO] [拉黑模式] 使用 Provider: %s (Level %d) | Model: %s\n", firstProvider.Name, firstLevel, effectiveModel)
+
+			startTime := time.Now()
+			ok, err := prs.forwardRequest(c, kind, *firstProvider, endpoint, query, clientHeaders, currentBodyBytes, isStream, effectiveModel)
+			duration := time.Since(startTime)
+
+			if ok {
+				fmt.Printf("[INFO] ✓ 成功: %s | 耗时: %.2fs\n", firstProvider.Name, duration.Seconds())
+				if err := prs.blacklistService.RecordSuccess(kind, firstProvider.Name); err != nil {
+					fmt.Printf("[WARN] 清零失败计数失败: %v\n", err)
+				}
+				return
+			}
+
+			// 失败：记录失败次数并返回错误（不降级到下一个 provider）
+			errorMsg := "未知错误"
+			if err != nil {
+				errorMsg = err.Error()
+			}
+			fmt.Printf("[WARN] ✗ 失败: %s | 错误: %s | 耗时: %.2fs（拉黑模式，不降级）\n",
+				firstProvider.Name, errorMsg, duration.Seconds())
+
+			if err := prs.blacklistService.RecordFailure(kind, firstProvider.Name); err != nil {
+				fmt.Printf("[ERROR] 记录失败到黑名单失败: %v\n", err)
+			}
+
+			c.JSON(http.StatusBadGateway, gin.H{
+				"error":    fmt.Sprintf("Provider %s 请求失败: %s", firstProvider.Name, errorMsg),
+				"provider": firstProvider.Name,
+				"level":    firstLevel,
+				"duration": fmt.Sprintf("%.2fs", duration.Seconds()),
+				"mode":     "blacklist",
+				"hint":     "拉黑模式已开启，不自动降级。如需自动降级请关闭拉黑功能",
+			})
+			return
+		}
+
+		// 【降级模式】：拉黑功能关闭，失败自动尝试下一个 provider
+		fmt.Printf("[INFO] 🔄 降级模式（拉黑功能已关闭）\n")
 
 		var lastError error
 		var lastProvider string
