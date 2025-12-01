@@ -6,7 +6,11 @@ import (
 	_ "embed"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"runtime"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -62,6 +66,12 @@ func (a *AppService) OpenSecondWindow() {
 // logs any error that might occur.
 func main() {
 	appservice := &AppService{}
+
+	// 【更新恢复】Windows 平台：检查并从失败的更新中恢复
+	checkAndRecoverFromFailedUpdate()
+
+	// 【残留清理】Windows 平台：清理更新过程中的临时文件
+	cleanupOldFiles()
 
 	// 【修复】第一步：初始化数据库（必须最先执行）
 	// 解决问题：InitGlobalDBQueue 依赖 xdb.DB("default")，但 xdb.Inits() 在 NewProviderRelayService 中
@@ -332,5 +342,163 @@ func handleDockVisibility(service *dock.DockService, show bool) {
 		service.ShowAppIcon()
 	} else {
 		service.HideAppIcon()
+	}
+}
+
+// ============================================================
+// Windows 静默更新：启动恢复和清理功能
+// ============================================================
+
+// checkAndRecoverFromFailedUpdate 检查并从失败的更新中恢复
+// 在主程序启动时调用，处理 updater.exe 崩溃或更新失败的情况
+func checkAndRecoverFromFailedUpdate() {
+	if runtime.GOOS != "windows" {
+		return
+	}
+
+	currentExe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	currentExe, _ = filepath.EvalSymlinks(currentExe)
+	backupPath := currentExe + ".old"
+
+	// 检查备份文件是否存在
+	backupInfo, err := os.Stat(backupPath)
+	if err != nil {
+		return // 无备份，正常情况
+	}
+
+	log.Printf("[Recovery] 检测到备份文件: %s (size=%d)", backupPath, backupInfo.Size())
+
+	// 检查当前 exe 是否可用（大小 > 1MB）
+	currentInfo, err := os.Stat(currentExe)
+	currentOK := err == nil && currentInfo.Size() > 1024*1024 // 至少 1MB
+
+	if currentOK {
+		// 当前版本正常，说明更新成功，清理备份
+		log.Println("[Recovery] 更新成功，清理旧版本备份")
+		if err := os.Remove(backupPath); err != nil {
+			log.Printf("[Recovery] 删除备份失败: %v", err)
+		}
+	} else {
+		// 当前版本损坏，需要回滚
+		log.Printf("[Recovery] 当前版本异常（size=%d），从备份恢复", currentInfo.Size())
+		if err := os.Remove(currentExe); err != nil {
+			log.Printf("[Recovery] 删除损坏文件失败: %v", err)
+		}
+		if err := os.Rename(backupPath, currentExe); err != nil {
+			log.Printf("[Recovery] 回滚失败: %v", err)
+			log.Println("[Recovery] 请手动将备份文件恢复为原文件名")
+		} else {
+			log.Println("[Recovery] 回滚成功，已恢复到旧版本")
+		}
+	}
+}
+
+// cleanupOldFiles 清理更新过程中的残留文件
+// 在主程序启动时调用
+func cleanupOldFiles() {
+	if runtime.GOOS != "windows" {
+		return
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+
+	updateDir := filepath.Join(home, ".code-switch", "updates")
+	if _, err := os.Stat(updateDir); os.IsNotExist(err) {
+		return // 更新目录不存在
+	}
+
+	log.Printf("[Cleanup] 开始清理更新目录: %s", updateDir)
+
+	// 1. 清理超过 7 天的 .old 备份文件
+	cleanupByAge(updateDir, ".old", 7*24*time.Hour)
+
+	// 2. 清理旧版本下载文件（保留最新 1 个）
+	cleanupByCount(updateDir, "CodeSwitch*.exe", 1)
+
+	// 3. 清理旧 updater（保留最新 1 个）
+	cleanupByCount(updateDir, "updater*.exe", 1)
+
+	// 4. 清理旧日志（保留最近 5 个，或总大小 < 5MB）
+	cleanupLogs(updateDir, 5, 5*1024*1024)
+
+	log.Println("[Cleanup] 清理完成")
+}
+
+// cleanupByAge 按时间清理文件
+func cleanupByAge(dir, suffix string, maxAge time.Duration) {
+	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		if strings.HasSuffix(path, suffix) && time.Since(info.ModTime()) > maxAge {
+			log.Printf("[Cleanup] 删除过期文件: %s (age=%v)", path, time.Since(info.ModTime()).Round(time.Hour))
+			os.Remove(path)
+		}
+		return nil
+	})
+}
+
+// cleanupByCount 按数量清理（保留最新 N 个）
+func cleanupByCount(dir, pattern string, keepCount int) {
+	matches, err := filepath.Glob(filepath.Join(dir, pattern))
+	if err != nil || len(matches) <= keepCount {
+		return
+	}
+
+	// 按修改时间排序（新→旧）
+	sort.Slice(matches, func(i, j int) bool {
+		infoI, _ := os.Stat(matches[i])
+		infoJ, _ := os.Stat(matches[j])
+		if infoI == nil || infoJ == nil {
+			return false
+		}
+		return infoI.ModTime().After(infoJ.ModTime())
+	})
+
+	// 删除多余的旧文件
+	for _, path := range matches[keepCount:] {
+		log.Printf("[Cleanup] 删除旧版本: %s", path)
+		os.Remove(path)
+	}
+}
+
+// cleanupLogs 日志清理（数量 + 大小双重限制）
+func cleanupLogs(dir string, maxCount int, maxTotalSize int64) {
+	pattern := filepath.Join(dir, "update*.log")
+	matches, err := filepath.Glob(pattern)
+	if err != nil || len(matches) == 0 {
+		return
+	}
+
+	// 按修改时间排序（新→旧）
+	sort.Slice(matches, func(i, j int) bool {
+		infoI, _ := os.Stat(matches[i])
+		infoJ, _ := os.Stat(matches[j])
+		if infoI == nil || infoJ == nil {
+			return false
+		}
+		return infoI.ModTime().After(infoJ.ModTime())
+	})
+
+	var totalSize int64
+	for i, path := range matches {
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+
+		// 超过数量限制或大小限制，删除
+		if i >= maxCount || totalSize+info.Size() > maxTotalSize {
+			log.Printf("[Cleanup] 删除旧日志: %s (size=%d)", path, info.Size())
+			os.Remove(path)
+		} else {
+			totalSize += info.Size()
+		}
 	}
 }

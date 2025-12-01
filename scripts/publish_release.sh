@@ -62,10 +62,43 @@ done
 
 env ARCH=amd64 wails3 task windows:package ${BUILD_OPTS:-}
 
+# 构建 updater.exe（静默更新辅助程序）
+echo "==> Building updater.exe"
+wails3 task windows:build:updater ${BUILD_OPTS:-}
+
+# 统一文件名大小写（CodeSwitch.exe）
+if [ -f "bin/codeswitch.exe" ] && [ ! -f "bin/CodeSwitch.exe" ]; then
+  mv "bin/codeswitch.exe" "bin/CodeSwitch.exe"
+fi
+
+# 生成 SHA256 哈希文件
+echo "==> Generating SHA256 checksums"
+generate_sha256() {
+  local file="$1"
+  if [ -f "$file" ]; then
+    local hash_file="${file}.sha256"
+    if command -v sha256sum >/dev/null 2>&1; then
+      sha256sum "$file" | awk '{print $1 "  " FILENAME}' FILENAME="$(basename "$file")" > "$hash_file"
+    elif command -v shasum >/dev/null 2>&1; then
+      shasum -a 256 "$file" | awk '{print $1 "  " FILENAME}' FILENAME="$(basename "$file")" > "$hash_file"
+    else
+      echo "Warning: no sha256sum or shasum available, skipping hash for $file" >&2
+      return 1
+    fi
+    echo "  hash: $hash_file"
+  fi
+}
+
+generate_sha256 "bin/CodeSwitch.exe"
+generate_sha256 "bin/updater.exe"
+
 ASSETS=(
   "${MAC_ZIPS[@]}"
   "bin/codeswitch-amd64-installer.exe"
-  "bin/codeswitch.exe"
+  "bin/CodeSwitch.exe"
+  "bin/CodeSwitch.exe.sha256"
+  "bin/updater.exe"
+  "bin/updater.exe.sha256"
 )
 
 for asset in "${ASSETS[@]}"; do
