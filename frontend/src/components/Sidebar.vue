@@ -294,7 +294,7 @@ html.dark .collapse-btn:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 6px;
+  padding: 8px 10px;
   border-radius: 8px;
   border: none;
   background: transparent;
@@ -303,12 +303,17 @@ html.dark .collapse-btn:hover {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
-  width: 100%;
+  /* 横向留出缓冲，避免被父级 overflow 裁切圆角 */
+  box-sizing: border-box;
+  width: calc(100% - 8px);
+  margin: 0 4px;
   text-align: left;
 }
 
 .mac-sidebar.collapsed .nav-item {
-  width: 100%;
+  /* 收起态固定宽度，确保图标居中 */
+  width: 36px;
+  margin: 0 auto;
   padding: 10px 0;
   justify-content: center;
 }

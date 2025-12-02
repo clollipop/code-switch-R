@@ -347,7 +347,8 @@
         "checking": "检查中...",
         "checkNow": "立即检查",
         "downloading": "下载中 {progress}%",
-        "downloadAndInstall": "下载并安装"
+        "downloadAndInstall": "下载并安装",
+        "installAndRestart": "安装并重启"
       }
     },
     "mcp": {

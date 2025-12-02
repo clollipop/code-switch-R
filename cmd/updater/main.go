@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -21,6 +22,59 @@ type UpdateTask struct {
 	BackupPath   string   `json:"backup_path"`    // 备份路径
 	CleanupPaths []string `json:"cleanup_paths"`  // 需要清理的临时文件
 	TimeoutSec   int      `json:"timeout_sec"`    // 必填：等待超时（秒），由主程序动态计算
+}
+
+// isElevated 检查当前进程是否具有管理员权限
+func isElevated() bool {
+	var sid *windows.SID
+	err := windows.AllocateAndInitializeSid(
+		&windows.SECURITY_NT_AUTHORITY,
+		2,
+		windows.SECURITY_BUILTIN_DOMAIN_RID,
+		windows.DOMAIN_ALIAS_RID_ADMINS,
+		0, 0, 0, 0, 0, 0,
+		&sid,
+	)
+	if err != nil {
+		return false
+	}
+	defer windows.FreeSid(sid)
+
+	token := windows.Token(0)
+	member, err := token.IsMember(sid)
+	if err != nil {
+		return false
+	}
+	return member
+}
+
+// ensureElevation 确保以管理员权限运行，如果没有则请求 UAC 提权
+func ensureElevation() {
+	if isElevated() {
+		return // 已有管理员权限
+	}
+
+	log.Println("[UAC] 未检测到管理员权限，正在请求提权...")
+
+	// 获取当前可执行文件路径
+	exePath, err := os.Executable()
+	if err != nil {
+		log.Fatalf("[UAC] 获取可执行文件路径失败: %v", err)
+	}
+
+	// 使用 ShellExecute 请求 UAC 提权
+	verb := windows.StringToUTF16Ptr("runas")
+	file := windows.StringToUTF16Ptr(exePath)
+	args := windows.StringToUTF16Ptr(strings.Join(os.Args[1:], " "))
+	dir := windows.StringToUTF16Ptr(filepath.Dir(exePath))
+
+	err = windows.ShellExecute(0, verb, file, args, dir, windows.SW_SHOWNORMAL)
+	if err != nil {
+		log.Fatalf("[UAC] 请求管理员权限失败: %v", err)
+	}
+
+	// 当前非提权进程退出，提权后的新进程会继续执行
+	os.Exit(0)
 }
 
 func main() {
@@ -44,6 +98,17 @@ func main() {
 	log.Println("========================================")
 	log.Printf("CodeSwitch Updater 启动")
 	log.Printf("任务文件: %s", taskFile)
+
+	// UAC 自检：确保以管理员权限运行
+	if isElevated() {
+		log.Println("权限状态: 管理员")
+	} else {
+		log.Println("权限状态: 普通用户")
+		log.Println("[UAC] 请求管理员权限...")
+		ensureElevation()
+		// ensureElevation 会退出当前进程，以下代码不会执行
+	}
+
 	log.Println("========================================")
 
 	// 读取任务配置

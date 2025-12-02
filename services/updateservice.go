@@ -336,67 +336,66 @@ func (us *UpdateService) findSHA256ForAsset(assets []struct {
 	return ""
 }
 
-// DownloadUpdate 下载更新文件
+// DownloadUpdate 下载更新文件（支持更新锁、重试、断点续传、SHA256校验）
 func (us *UpdateService) DownloadUpdate(progressCallback func(float64)) error {
+	// 获取更新锁，防止并发下载
+	if err := us.acquireUpdateLock(); err != nil {
+		return err
+	}
+	defer us.releaseUpdateLock()
+
 	us.mu.Lock()
 	url := us.downloadURL
+	expectedHash := ""
+	if us.latestUpdateInfo != nil {
+		expectedHash = us.latestUpdateInfo.SHA256
+	}
+	// 重置下载状态
+	us.updateReady = false
+	us.downloadProgress = 0
 	us.mu.Unlock()
+	us.SaveState()
 
 	if url == "" {
 		return fmt.Errorf("下载链接为空，请先检查更新")
 	}
 
-	// 创建 HTTP 请求
-	resp, err := http.Get(url)
-	if err != nil {
-		return fmt.Errorf("下载失败: %w", err)
-	}
-	defer resp.Body.Close()
+	filePath := filepath.Join(us.updateDir, filepath.Base(url))
 
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("下载失败，HTTP 状态码: %d", resp.StatusCode)
-	}
-
-	// 生成文件名
-	filename := filepath.Base(url)
-	filePath := filepath.Join(us.updateDir, filename)
-
-	// 创建文件
-	out, err := os.Create(filePath)
-	if err != nil {
-		return fmt.Errorf("创建文件失败: %w", err)
-	}
-	defer out.Close()
-
-	// 下载并显示进度
-	totalSize := resp.ContentLength
-	downloaded := int64(0)
-
-	buf := make([]byte, 32*1024) // 32KB buffer
-	for {
-		n, err := resp.Body.Read(buf)
-		if n > 0 {
-			_, writeErr := out.Write(buf[:n])
-			if writeErr != nil {
-				return fmt.Errorf("写入文件失败: %w", writeErr)
-			}
-
-			downloaded += int64(n)
-
-			if totalSize > 0 && progressCallback != nil {
-				progress := float64(downloaded) / float64(totalSize) * 100
-				us.mu.Lock()
-				us.downloadProgress = progress
-				us.mu.Unlock()
-				progressCallback(progress)
-			}
+	// 检查本地是否已有完整文件（断点续传场景：之前下载完成但未安装）
+	if expectedHash != "" {
+		if hash, err := calculateSHA256(filePath); err == nil && strings.EqualFold(hash, expectedHash) {
+			log.Printf("[UpdateService] 本地已有完整文件，跳过下载")
+			us.mu.Lock()
+			us.updateFilePath = filePath
+			us.downloadProgress = 100
+			us.mu.Unlock()
+			return us.PrepareUpdate()
 		}
+	}
 
-		if err == io.EOF {
-			break
+	// 三次重试下载
+	var lastErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		if err := us.downloadWithResume(url, filePath, progressCallback); err != nil {
+			lastErr = err
+			log.Printf("[UpdateService] 下载失败（第%d次）: %v", attempt, err)
+			time.Sleep(time.Duration(attempt) * 2 * time.Second)
+			continue
 		}
-		if err != nil {
-			return fmt.Errorf("读取数据失败: %w", err)
+		lastErr = nil
+		break
+	}
+	if lastErr != nil {
+		_ = os.Remove(filePath) // 清理残留文件
+		return fmt.Errorf("下载失败: %w", lastErr)
+	}
+
+	// SHA256 校验
+	if expectedHash != "" {
+		if err := us.verifyDownload(filePath, expectedHash); err != nil {
+			_ = os.Remove(filePath)
+			return err
 		}
 	}
 
@@ -410,6 +409,96 @@ func (us *UpdateService) DownloadUpdate(progressCallback func(float64)) error {
 		return fmt.Errorf("准备更新失败: %w", err)
 	}
 
+	return nil
+}
+
+// downloadWithResume 支持断点续传的下载
+func (us *UpdateService) downloadWithResume(url, dest string, progressCallback func(float64)) error {
+	client := &http.Client{Timeout: 5 * time.Minute}
+
+	var start int64
+	var total int64
+	if info, err := os.Stat(dest); err == nil {
+		start = info.Size()
+	}
+
+	// HEAD 请求检查是否支持 Range
+	if start > 0 {
+		if head, err := client.Head(url); err == nil && head.StatusCode == http.StatusOK {
+			if strings.EqualFold(head.Header.Get("Accept-Ranges"), "bytes") {
+				total = head.ContentLength
+				log.Printf("[UpdateService] 断点续传: 从 %d 字节继续下载", start)
+			} else {
+				start = 0
+				_ = os.Remove(dest)
+			}
+		} else {
+			start = 0
+			_ = os.Remove(dest)
+		}
+	}
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return err
+	}
+	if start > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", start))
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		return fmt.Errorf("下载失败，HTTP 状态码: %d", resp.StatusCode)
+	}
+
+	if total == 0 {
+		total = resp.ContentLength
+		if total > 0 && start > 0 {
+			total += start
+		}
+	}
+
+	var out *os.File
+	if start > 0 {
+		out, err = os.OpenFile(dest, os.O_WRONLY|os.O_APPEND, 0o644)
+	} else {
+		out, err = os.Create(dest)
+	}
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	downloaded := start
+	buf := make([]byte, 32*1024)
+	for {
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, writeErr := out.Write(buf[:n]); writeErr != nil {
+				return fmt.Errorf("写入文件失败: %w", writeErr)
+			}
+			downloaded += int64(n)
+
+			if total > 0 && progressCallback != nil {
+				progress := float64(downloaded) / float64(total) * 100
+				us.mu.Lock()
+				us.downloadProgress = progress
+				us.mu.Unlock()
+				progressCallback(progress)
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return fmt.Errorf("读取数据失败: %w", readErr)
+		}
+	}
 	return nil
 }
 
@@ -455,6 +544,7 @@ func (us *UpdateService) PrepareUpdate() error {
 }
 
 // ApplyUpdate 应用更新（启动时调用）
+// 添加更新锁防止并发，SHA256 校验防止损坏文件
 func (us *UpdateService) ApplyUpdate() error {
 	pendingFile := filepath.Join(filepath.Dir(us.stateFile), ".pending-update")
 
@@ -463,30 +553,59 @@ func (us *UpdateService) ApplyUpdate() error {
 		return nil // 没有待更新
 	}
 
+	// 获取更新锁
+	if err := us.acquireUpdateLock(); err != nil {
+		log.Printf("[UpdateService] 获取更新锁失败，跳过更新: %v", err)
+		return nil // 另一个更新正在进行，静默跳过
+	}
+	defer us.releaseUpdateLock()
+
 	// 读取元数据
 	data, err := os.ReadFile(pendingFile)
 	if err != nil {
+		us.clearPendingState()
 		return fmt.Errorf("读取标记文件失败: %w", err)
 	}
 
 	var metadata map[string]interface{}
 	if err := json.Unmarshal(data, &metadata); err != nil {
+		us.clearPendingState()
 		return fmt.Errorf("解析元数据失败: %w", err)
 	}
 
 	downloadPath, ok := metadata["download_path"].(string)
 	if !ok || downloadPath == "" {
+		us.clearPendingState()
 		return fmt.Errorf("元数据中缺少下载路径")
 	}
 
-	// 从元数据恢复 SHA256（关键：重启后内存中的 latestUpdateInfo 为空）
+	// 检查下载文件是否存在
+	if _, err := os.Stat(downloadPath); os.IsNotExist(err) {
+		us.clearPendingState()
+		return fmt.Errorf("更新文件不存在: %s", downloadPath)
+	}
+
+	// 从元数据恢复 SHA256 并验证
+	var expectedHash string
 	if sha256Hash, ok := metadata["sha256"].(string); ok && sha256Hash != "" {
+		expectedHash = sha256Hash
 		us.mu.Lock()
 		us.latestUpdateInfo = &UpdateInfo{
 			SHA256: sha256Hash,
 		}
 		us.mu.Unlock()
 		log.Printf("[UpdateService] 从元数据恢复 SHA256: %s", sha256Hash)
+	}
+
+	// SHA256 校验（如果有）
+	if expectedHash != "" {
+		if err := us.verifyDownload(downloadPath, expectedHash); err != nil {
+			log.Printf("[UpdateService] SHA256 校验失败: %v", err)
+			us.clearPendingState()
+			_ = os.Remove(downloadPath) // 删除损坏的文件
+			return fmt.Errorf("更新文件校验失败: %w", err)
+		}
+		log.Println("[UpdateService] SHA256 校验通过")
 	}
 
 	// 根据平台执行安装
@@ -503,13 +622,27 @@ func (us *UpdateService) ApplyUpdate() error {
 	}
 
 	if installErr != nil {
+		// 安装失败，清理状态但保留下载文件（可能需要重试）
+		us.clearPendingState()
 		return installErr
 	}
 
-	// 清理标记文件
+	// 清理标记文件（成功情况下由平台特定函数清理）
+	return nil
+}
+
+// clearPendingState 统一清理更新状态（成功或失败后调用）
+func (us *UpdateService) clearPendingState() {
+	pendingFile := filepath.Join(filepath.Dir(us.stateFile), ".pending-update")
 	_ = os.Remove(pendingFile)
 
-	return nil
+	us.mu.Lock()
+	us.updateReady = false
+	us.downloadProgress = 0
+	us.mu.Unlock()
+
+	us.SaveState()
+	log.Println("[UpdateService] 已清理更新状态")
 }
 
 // applyUpdateWindows Windows 平台更新
@@ -524,6 +657,7 @@ func (us *UpdateService) applyUpdateWindows(updatePath string) error {
 }
 
 // applyPortableUpdate 便携版更新逻辑
+// 使用 PowerShell 脚本等待当前进程退出后替换文件，解决 Windows 文件锁定问题
 func (us *UpdateService) applyPortableUpdate(newExePath string) error {
 	currentExe, err := os.Executable()
 	if err != nil {
@@ -538,40 +672,81 @@ func (us *UpdateService) applyPortableUpdate(newExePath string) error {
 
 	log.Printf("[UpdateService] 便携版更新: %s -> %s", newExePath, currentExe)
 
-	// 备份旧文件
+	// 清理更新状态
+	us.clearPendingState()
+
+	// 构建 PowerShell 脚本：等待进程退出 → 替换文件 → 启动新版本
 	backupPath := currentExe + ".old"
-	if err := os.Rename(currentExe, backupPath); err != nil {
-		return fmt.Errorf("备份旧文件失败: %w", err)
+	pid := os.Getpid()
+
+	// PowerShell 脚本内容
+	psScript := fmt.Sprintf(`
+$ErrorActionPreference = 'Stop'
+$pid = %d
+$currentExe = '%s'
+$newExe = '%s'
+$backupPath = '%s'
+
+# 等待主进程退出（最多 30 秒）
+$proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+if ($proc) {
+    Write-Host "等待进程 $pid 退出..."
+    $proc.WaitForExit(30000) | Out-Null
+}
+
+# 短暂延迟确保文件释放
+Start-Sleep -Milliseconds 500
+
+# 备份旧文件
+if (Test-Path $currentExe) {
+    Move-Item -Path $currentExe -Destination $backupPath -Force
+    Write-Host "已备份: $backupPath"
+}
+
+# 复制新文件
+Copy-Item -Path $newExe -Destination $currentExe -Force
+Write-Host "已替换: $currentExe"
+
+# 清理备份（延迟删除）
+Start-Sleep -Seconds 2
+if (Test-Path $backupPath) {
+    Remove-Item -Path $backupPath -Force -ErrorAction SilentlyContinue
+}
+
+# 启动新版本
+Start-Process -FilePath $currentExe
+Write-Host "更新完成，已启动新版本"
+`,
+		pid,
+		strings.ReplaceAll(currentExe, `\`, `\\`),
+		strings.ReplaceAll(newExePath, `\`, `\\`),
+		strings.ReplaceAll(backupPath, `\`, `\\`),
+	)
+
+	// 将脚本写入临时文件
+	scriptPath := filepath.Join(us.updateDir, "update-portable.ps1")
+	if err := os.WriteFile(scriptPath, []byte(psScript), 0o644); err != nil {
+		return fmt.Errorf("写入更新脚本失败: %w", err)
 	}
 
-	// 复制新文件
-	if err := copyUpdateFile(newExePath, currentExe); err != nil {
-		// 恢复备份
-		_ = os.Rename(backupPath, currentExe)
-		return fmt.Errorf("复制新文件失败: %w", err)
-	}
+	log.Printf("[UpdateService] 已创建更新脚本: %s", scriptPath)
 
-	log.Println("[UpdateService] 便携版更新成功，准备重启...")
-
-	// 删除备份（延迟删除，避免文件占用）
-	go func() {
-		time.Sleep(2 * time.Second)
-		_ = os.Remove(backupPath)
-	}()
-
-	// **关键修复**：删除 pending 标记文件，防止重启后再次触发更新
-	pendingFile := filepath.Join(filepath.Dir(us.stateFile), ".pending-update")
-	_ = os.Remove(pendingFile)
-
-	// 重启应用
-	cmd := exec.Command(currentExe)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	// 启动 PowerShell 执行脚本（-WindowStyle Hidden 隐藏窗口）
+	cmd := exec.Command("powershell.exe",
+		"-ExecutionPolicy", "Bypass",
+		"-WindowStyle", "Hidden",
+		"-File", scriptPath,
+	)
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("重启应用失败: %w", err)
+		return fmt.Errorf("启动更新脚本失败: %w", err)
 	}
 
-	// 退出当前进程
+	log.Printf("[UpdateService] 更新脚本已启动 (PID=%d)，准备退出主程序...", cmd.Process.Pid)
+
+	// 释放更新锁
+	us.releaseUpdateLock()
+
+	// 退出当前进程，让 PowerShell 脚本完成替换
 	os.Exit(0)
 	return nil
 }
@@ -1158,7 +1333,8 @@ func calculateTimeout(fileSize int64) int {
 	return base + extra
 }
 
-// applyInstalledUpdate 安装版更新逻辑（使用 updater.exe）
+// applyInstalledUpdate 安装版更新逻辑（使用 PowerShell UAC 提权）
+// 通过 PowerShell 的 Start-Process -Verb RunAs 触发 UAC 弹窗
 func (us *UpdateService) applyInstalledUpdate(newExePath string) error {
 	currentExe, err := os.Executable()
 	if err != nil {
@@ -1208,20 +1384,28 @@ func (us *UpdateService) applyInstalledUpdate(newExePath string) error {
 	log.Printf("[UpdateService] 已创建更新任务: %s", taskFile)
 	log.Printf("[UpdateService] 任务配置: PID=%d, Timeout=%ds", os.Getpid(), timeout)
 
-	// 4. 删除 pending 标记
-	pendingFile := filepath.Join(filepath.Dir(us.stateFile), ".pending-update")
-	_ = os.Remove(pendingFile)
+	// 4. 清理更新状态
+	us.clearPendingState()
 
-	// 5. 启动 updater.exe（会自动请求 UAC）
-	log.Printf("[UpdateService] 启动更新器: %s %s", updaterPath, taskFile)
-	cmd := exec.Command(updaterPath, taskFile)
+	// 5. 使用 PowerShell 以管理员权限启动 updater.exe
+	// Start-Process -Verb RunAs 会触发 UAC 弹窗
+	log.Printf("[UpdateService] 使用 UAC 提权启动更新器: %s", updaterPath)
+	cmd := exec.Command("powershell.exe",
+		"-ExecutionPolicy", "Bypass",
+		"-Command",
+		fmt.Sprintf(`Start-Process -FilePath '%s' -ArgumentList '%s' -Verb RunAs -WindowStyle Hidden`,
+			strings.ReplaceAll(updaterPath, `'`, `''`),
+			strings.ReplaceAll(taskFile, `'`, `''`),
+		),
+	)
+
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("启动更新器失败: %w", err)
+		return fmt.Errorf("启动 UAC 提权更新器失败: %w", err)
 	}
 
-	log.Printf("[UpdateService] 更新器已启动 (PID=%d)，准备退出主程序...", cmd.Process.Pid)
+	log.Printf("[UpdateService] UAC 提权请求已发送，准备退出主程序...")
 
-	// 6. 释放更新锁（如果有）
+	// 6. 释放更新锁
 	us.releaseUpdateLock()
 
 	// 7. 退出主程序

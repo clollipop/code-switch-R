@@ -160,6 +160,19 @@ const downloadAndInstall = async () => {
   }
 }
 
+// 当更新已下载完成时，直接安装并重启（无需再次下载）
+const installAndRestart = async () => {
+  const confirmed = confirm('是否立即安装更新并重启应用？')
+  if (confirmed) {
+    try {
+      await restartApp()
+    } catch (error) {
+      console.error('restart failed', error)
+      alert('重启失败，请手动重启应用')
+    }
+  }
+}
+
 const formatLastCheckTime = (timeStr?: string) => {
   if (!timeStr) return '从未检查'
 
@@ -454,13 +467,9 @@ onMounted(async () => {
             v-if="updateState?.update_ready"
             :label="$t('components.general.label.manualUpdate')">
             <button
-              @click="downloadAndInstall"
-              :disabled="downloading"
+              @click="installAndRestart"
               class="primary-btn">
-              {{ downloading
-                 ? $t('components.general.update.downloading', { progress: Math.round(updateState.download_progress) })
-                 : $t('components.general.update.downloadAndInstall')
-              }}
+              {{ $t('components.general.update.installAndRestart') }}
             </button>
           </ListItem>
         </div>

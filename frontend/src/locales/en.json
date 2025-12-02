@@ -346,7 +346,8 @@
         "checking": "Checking...",
         "checkNow": "Check now",
         "downloading": "Downloading {progress}%",
-        "downloadAndInstall": "Download and install"
+        "downloadAndInstall": "Download and install",
+        "installAndRestart": "Install and restart"
       }
     },
     "mcp": {
