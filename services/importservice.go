@@ -214,7 +214,20 @@ func ccSwitchConfigPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".cc-switch", "config.json"), nil
+	// 优先检查新版配置文件，回退到旧版
+	candidates := []string{
+		filepath.Join(home, ".cc-switch", "config.json.migrated"),
+		filepath.Join(home, ".cc-switch", "config.json"),
+	}
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			return p, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", err // 权限/IO 等异常立即暴露
+		}
+	}
+	// 未找到现有文件时，默认使用新路径
+	return candidates[0], nil
 }
 
 func firstRunMarkerPath() (string, error) {
