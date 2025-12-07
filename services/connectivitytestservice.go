@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -138,6 +140,15 @@ func (cts *ConnectivityTestService) TestProvider(ctx context.Context, provider P
 	result.LatencyMs = latencyMs
 
 	if err != nil {
+		// 检测是否为超时错误 - 超时应视为"慢但可用"（黄色），而非"不可用"（红色）
+		// 这样可以避免慢响应的 Provider 被误判为失败而拉黑
+		if isTimeoutError(err) {
+			result.Status = StatusDegraded
+			result.SubStatus = SubStatusSlowLatency
+			result.Message = fmt.Sprintf("响应超时 (>%ds)", int(cts.client.Timeout.Seconds()))
+			return result
+		}
+		// 真正的网络错误（连接失败、DNS 解析失败等）
 		result.Status = StatusUnavailable
 		result.SubStatus = SubStatusNetworkError
 		result.Message = cts.truncateMessage(fmt.Sprintf("网络错误: %v", err))
@@ -315,6 +326,36 @@ func (cts *ConnectivityTestService) truncateMessage(msg string) string {
 		return msg[:512] + "..."
 	}
 	return msg
+}
+
+// isTimeoutError 检测错误是否为超时类型
+// 超时包括：context.DeadlineExceeded、net.Error.Timeout()、以及错误消息中包含 timeout 的情况
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// 检查 context.DeadlineExceeded
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+
+	// 检查 os.ErrDeadlineExceeded（Go 1.15+）
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		return true
+	}
+
+	// 检查 net.Error 接口的 Timeout() 方法
+	var netErr interface{ Timeout() bool }
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+
+	// 检查错误消息（兜底方案）
+	errMsg := strings.ToLower(err.Error())
+	return strings.Contains(errMsg, "timeout") ||
+		strings.Contains(errMsg, "deadline exceeded") ||
+		strings.Contains(errMsg, "context canceled")
 }
 
 // TestAll 测试指定平台的所有启用检测的供应商

@@ -17,6 +17,7 @@ export interface GeminiProvider {
   category?: string // official, third_party, custom
   partnerPromotionKey?: string
   enabled: boolean
+  level?: number // 优先级分组 (1-10, 默认 1)
   envConfig?: Record<string, string>
   settingsConfig?: Record<string, any>
 }
