@@ -78,7 +78,11 @@ func providerFilePath(kind string) (string, error) {
 func (ps *ProviderService) SaveProviders(kind string, providers []Provider) error {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
+	return ps.saveProvidersLocked(kind, providers)
+}
 
+// saveProvidersLocked 内部保存方法，调用方必须已持有锁
+func (ps *ProviderService) saveProvidersLocked(kind string, providers []Provider) error {
 	path, err := providerFilePath(kind)
 	if err != nil {
 		return err
@@ -214,9 +218,9 @@ func (ps *ProviderService) DuplicateProvider(kind string, sourceID int64) (*Prov
 		}
 	}
 
-	// 6. 添加到列表并保存
+	// 6. 添加到列表并保存（使用内部方法避免死锁）
 	providers = append(providers, *cloned)
-	if err := ps.SaveProviders(kind, providers); err != nil {
+	if err := ps.saveProvidersLocked(kind, providers); err != nil {
 		return nil, fmt.Errorf("保存副本失败: %w", err)
 	}
 

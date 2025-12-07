@@ -751,6 +751,7 @@ type ReqeustLog struct {
 	CreatedAt         string  `json:"created_at"`
 	InputCost         float64 `json:"input_cost"`
 	OutputCost        float64 `json:"output_cost"`
+	ReasoningCost     float64 `json:"reasoning_cost"`
 	CacheCreateCost   float64 `json:"cache_create_cost"`
 	CacheReadCost     float64 `json:"cache_read_cost"`
 	Ephemeral5mCost   float64 `json:"ephemeral_5m_cost"`
@@ -805,6 +806,11 @@ func mergeGeminiUsageMetadata(usage gjson.Result, reqLog *ReqeustLog) {
 	}
 	if v := int(usage.Get("cachedContentTokenCount").Int()); v > reqLog.CacheReadTokens {
 		reqLog.CacheReadTokens = v
+	}
+	// Gemini thinking/reasoning tokens (thoughtsTokenCount)
+	// 参考: https://ai.google.dev/gemini-api/docs/thinking
+	if v := int(usage.Get("thoughtsTokenCount").Int()); v > reqLog.ReasoningTokens {
+		reqLog.ReasoningTokens = v
 	}
 
 	// 若仅提供 totalTokenCount，按 total - input 估算输出 token
