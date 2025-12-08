@@ -625,6 +625,16 @@
                   <span class="field-hint">{{ t('components.main.form.hints.connectivityTestModel') }}</span>
                 </div>
 
+                <div v-if="modalState.form.connectivityCheck" class="form-field">
+                  <span>{{ t('components.main.form.labels.apiFormat') }}</span>
+                  <select v-model="modalState.form.apiFormat" class="model-select">
+                    <option value="">{{ t('components.main.form.placeholders.apiFormat') }}</option>
+                    <option value="anthropic">Anthropic (x-api-key)</option>
+                    <option value="openai">OpenAI (Bearer)</option>
+                  </select>
+                  <span class="field-hint">{{ t('components.main.form.hints.apiFormat') }}</span>
+                </div>
+
                 <footer class="form-actions">
                   <BaseButton variant="outline" type="button" @click="closeModal">
                     {{ t('components.main.form.actions.cancel') }}
@@ -1799,6 +1809,7 @@ type VendorForm = {
   cliConfig?: Record<string, any>
   connectivityCheck?: boolean
   connectivityTestModel?: string
+  apiFormat?: string
 }
 
 const iconOptions = Object.keys(lobeIcons).sort((a, b) => a.localeCompare(b))
@@ -1817,6 +1828,7 @@ const defaultFormValues = (): VendorForm => ({
   cliConfig: {},
   connectivityCheck: false,
   connectivityTestModel: '',
+  apiFormat: '',
 })
 
 // Level 描述文本映射（1-10）
@@ -1896,6 +1908,7 @@ const openEditModal = (card: AutomationCard) => {
     cliConfig: card.cliConfig || {},
     connectivityCheck: card.connectivityCheck || false,
     connectivityTestModel: card.connectivityTestModel || '',
+    apiFormat: card.apiFormat || '',
   })
   modalState.errors.apiUrl = ''
   modalState.open = true
@@ -1943,6 +1956,7 @@ const submitModal = async () => {
       cliConfig: modalState.form.cliConfig || {},
       connectivityCheck: modalState.form.connectivityCheck || false,
       connectivityTestModel: modalState.form.connectivityTestModel || '',
+      apiFormat: modalState.form.apiFormat || '',
     })
     if (prevLevel !== nextLevel) {
       sortProvidersByLevel(list)
@@ -1965,6 +1979,7 @@ const submitModal = async () => {
       cliConfig: modalState.form.cliConfig || {},
       connectivityCheck: modalState.form.connectivityCheck || false,
       connectivityTestModel: modalState.form.connectivityTestModel || '',
+      apiFormat: modalState.form.apiFormat || '',
     }
     list.push(newCard)
     sortProvidersByLevel(list)

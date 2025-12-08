@@ -20,6 +20,8 @@ export type AutomationCard = {
   connectivityCheck?: boolean
   // 连通性检测模型：用户可选择或自定义测试模型
   connectivityTestModel?: string
+  // API 格式：anthropic 或 openai（默认自动检测）
+  apiFormat?: string
 }
 
 export const automationCardGroups: Record<'claude' | 'codex', AutomationCard[]> = {

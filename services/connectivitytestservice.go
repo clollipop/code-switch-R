@@ -112,8 +112,9 @@ func (cts *ConnectivityTestService) TestProvider(ctx context.Context, provider P
 		return result
 	}
 
-	// 根据平台拼接正确的端点路径（与 providerrelay.go 保持一致）
-	targetURL := cts.buildTargetURL(provider.APIURL, platform)
+	// 根据平台和 API 格式拼接正确的端点路径
+	apiFormat := cts.getEffectiveApiFormat(&provider, platform)
+	targetURL := cts.buildTargetURLWithFormat(provider.APIURL, platform, apiFormat)
 
 	// 创建 HTTP 请求
 	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(reqBody))
@@ -126,9 +127,8 @@ func (cts *ConnectivityTestService) TestProvider(ctx context.Context, provider P
 	// 设置 Headers
 	req.Header.Set("Content-Type", "application/json")
 	if provider.APIKey != "" {
-		// Claude/Anthropic 使用 x-api-key，OpenAI 使用 Authorization: Bearer
-		if strings.Contains(strings.ToLower(provider.APIURL), "anthropic") ||
-			strings.Contains(strings.ToLower(platform), "claude") {
+		// 根据 apiFormat 决定认证方式（apiFormat 已在上面定义）
+		if apiFormat == "anthropic" {
 			req.Header.Set("x-api-key", provider.APIKey)
 			req.Header.Set("anthropic-version", "2023-06-01")
 		} else {
@@ -183,7 +183,7 @@ func (cts *ConnectivityTestService) TestProvider(ctx context.Context, provider P
 	return result
 }
 
-// buildTestRequest 根据平台构建测试请求体
+// buildTestRequest 根据平台和 API 格式构建测试请求体
 func (cts *ConnectivityTestService) buildTestRequest(platform string, provider *Provider) ([]byte, string) {
 	var contentField string
 
@@ -204,11 +204,26 @@ func (cts *ConnectivityTestService) buildTestRequest(platform string, provider *
 		model = "gpt-3.5-turbo" // 兜底
 	}
 
-	// 确定模型名称
+	// 获取有效的 API 格式
+	apiFormat := cts.getEffectiveApiFormat(provider, platform)
+
 	switch platformKey {
 	case "claude":
+		if apiFormat == "openai" {
+			// OpenAI 兼容格式
+			contentField = "choices"
+			reqBody := map[string]interface{}{
+				"model":      model,
+				"max_tokens": 1,
+				"messages": []map[string]string{
+					{"role": "user", "content": "hi"},
+				},
+			}
+			data, _ := json.Marshal(reqBody)
+			return data, contentField
+		}
+		// Anthropic 原生格式
 		contentField = "content"
-		// Claude/Anthropic 格式
 		reqBody := map[string]interface{}{
 			"model":      model,
 			"max_tokens": 1,
@@ -221,7 +236,6 @@ func (cts *ConnectivityTestService) buildTestRequest(platform string, provider *
 
 	case "codex":
 		contentField = "choices"
-		// OpenAI 格式
 		reqBody := map[string]interface{}{
 			"model":      model,
 			"max_tokens": 1,
@@ -234,7 +248,6 @@ func (cts *ConnectivityTestService) buildTestRequest(platform string, provider *
 
 	case "gemini":
 		contentField = "candidates"
-		// Gemini 格式
 		reqBody := map[string]interface{}{
 			"model": model,
 			"contents": []map[string]interface{}{
@@ -249,7 +262,6 @@ func (cts *ConnectivityTestService) buildTestRequest(platform string, provider *
 		return data, contentField
 
 	default:
-		// 默认使用 OpenAI 格式
 		contentField = "choices"
 		reqBody := map[string]interface{}{
 			"model":      model,
@@ -328,21 +340,56 @@ func (cts *ConnectivityTestService) truncateMessage(msg string) string {
 	return msg
 }
 
-// buildTargetURL 根据平台拼接正确的 API 端点路径
-// 与 providerrelay.go 中的转发路径保持一致
+// getEffectiveApiFormat 获取有效的 API 格式
+// 优先使用用户配置，否则根据平台和 URL 自动判断
+func (cts *ConnectivityTestService) getEffectiveApiFormat(provider *Provider, platform string) string {
+	// 用户显式配置优先
+	if provider.ApiFormat != "" {
+		return strings.ToLower(provider.ApiFormat)
+	}
+
+	// 官方 Anthropic API 使用 anthropic 格式
+	if strings.Contains(strings.ToLower(provider.APIURL), "anthropic.com") {
+		return "anthropic"
+	}
+
+	// 其他第三方供应商默认使用 openai 格式（更通用）
+	return "openai"
+}
+
+// buildTargetURL 根据平台和 API 格式拼接正确的端点路径
 func (cts *ConnectivityTestService) buildTargetURL(baseURL, platform string) string {
 	baseURL = strings.TrimSuffix(baseURL, "/")
 
 	switch strings.ToLower(platform) {
 	case "claude":
+		// Claude 平台的路径由 apiFormat 决定，这里返回基础路径
+		// 实际路径在 buildTargetURLWithFormat 中处理
 		return baseURL + "/v1/messages"
 	case "codex":
 		return baseURL + "/responses"
 	case "gemini":
-		// Gemini 使用不同的路径格式，暂不支持
 		return baseURL
 	default:
-		// 默认使用 OpenAI 格式
+		return baseURL + "/v1/chat/completions"
+	}
+}
+
+// buildTargetURLWithFormat 根据 API 格式构建目标 URL
+func (cts *ConnectivityTestService) buildTargetURLWithFormat(baseURL, platform, apiFormat string) string {
+	baseURL = strings.TrimSuffix(baseURL, "/")
+
+	switch strings.ToLower(platform) {
+	case "claude":
+		if apiFormat == "openai" {
+			return baseURL + "/v1/chat/completions"
+		}
+		return baseURL + "/v1/messages"
+	case "codex":
+		return baseURL + "/responses"
+	case "gemini":
+		return baseURL
+	default:
 		return baseURL + "/v1/chat/completions"
 	}
 }

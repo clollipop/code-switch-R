@@ -193,7 +193,8 @@
           "enabled": "Enabled",
           "level": "Priority Level",
           "connectivityCheck": "Connectivity Check",
-          "connectivityTestModel": "Test Model"
+          "connectivityTestModel": "Test Model",
+          "apiFormat": "API Format"
         },
         "placeholders": {
           "name": "e.g. AICoding.sh",
@@ -202,12 +203,14 @@
           "officialSite": "https://vendor.com",
           "icon": "e.g. aicoding, kimi",
           "connectivityTestModel": "Select or use default",
-          "customModel": "Or enter custom model"
+          "customModel": "Or enter custom model",
+          "apiFormat": "Auto detect"
         },
         "hints": {
           "level": "Lower numbers = higher priority. Level 1 providers are tried first, then Level 2, etc.",
           "connectivityCheck": "When enabled, connectivity to this provider will be tested periodically; enabling this may consume a small amount of tokens",
-          "connectivityTestModel": "Select a model for connectivity testing, or leave empty to use platform default"
+          "connectivityTestModel": "Select a model for connectivity testing, or leave empty to use platform default",
+          "apiFormat": "Most third-party providers use OpenAI format, official Anthropic uses Anthropic format"
         },
         "actions": {
           "cancel": "Cancel",
