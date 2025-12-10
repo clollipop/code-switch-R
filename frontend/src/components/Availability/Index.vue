@@ -7,6 +7,7 @@ import {
   runSingleCheck,
   setAvailabilityMonitorEnabled,
   isPollingRunning,
+  saveAvailabilityConfig,
   ProviderTimeline,
   HealthStatus,
   formatStatus,
@@ -22,6 +23,16 @@ const timelines = ref<Record<string, ProviderTimeline[]>>({})
 const pollingRunning = ref(false)
 const lastUpdated = ref<Date | null>(null)
 const nextRefreshIn = ref(0)
+
+// 配置编辑弹窗状态
+const showConfigModal = ref(false)
+const savingConfig = ref(false)
+const activeProvider = ref<(ProviderTimeline & { platform: string }) | null>(null)
+const configForm = ref({
+  testModel: '',
+  testEndpoint: '',
+  timeout: 15000,
+})
 
 // 刷新定时器
 let refreshTimer: ReturnType<typeof setInterval> | null = null
@@ -159,6 +170,51 @@ function stopTimers() {
   }
 }
 
+// 打开配置编辑弹窗
+function editConfig(platform: string, timeline: ProviderTimeline) {
+  activeProvider.value = { ...timeline, platform }
+  const cfg = timeline.availabilityConfig || {}
+  configForm.value = {
+    testModel: cfg.testModel || '',
+    testEndpoint: cfg.testEndpoint || '',
+    timeout: cfg.timeout || 15000,
+  }
+  showConfigModal.value = true
+}
+
+// 关闭配置编辑弹窗
+function closeConfigModal() {
+  showConfigModal.value = false
+  activeProvider.value = null
+}
+
+// 保存配置
+async function saveConfig() {
+  if (!activeProvider.value) return
+  savingConfig.value = true
+  try {
+    await saveAvailabilityConfig(activeProvider.value.platform, activeProvider.value.providerId, {
+      testModel: configForm.value.testModel,
+      testEndpoint: configForm.value.testEndpoint,
+      timeout: Number(configForm.value.timeout) || 15000,
+    })
+    showConfigModal.value = false
+    await loadData()
+  } catch (error) {
+    console.error('Failed to save availability config:', error)
+  } finally {
+    savingConfig.value = false
+  }
+}
+
+// 显示配置值（为空时标注默认）
+function displayConfigValue(value: string | number | undefined, label: string) {
+  if (value === undefined || value === null || value === '' || value === 0) {
+    return `${label}（${t('availability.default')}）`
+  }
+  return String(value)
+}
+
 onMounted(async () => {
   await loadData()
   startRefreshTimer()
@@ -282,7 +338,23 @@ onUnmounted(() => {
                   >
                     {{ t('availability.check') }}
                   </button>
+
+                  <!-- 编辑配置按钮 -->
+                  <button
+                    v-if="timeline.availabilityMonitorEnabled"
+                    @click="editConfig(platform, timeline)"
+                    class="px-3 py-1 text-sm bg-[var(--mac-accent)] text-white rounded-lg hover:opacity-90 transition-colors"
+                  >
+                    {{ t('availability.editConfig') }}
+                  </button>
                 </div>
+              </div>
+
+              <!-- 当前生效配置 -->
+              <div v-if="timeline.availabilityMonitorEnabled" class="mt-3 text-sm text-[var(--mac-text-secondary)] space-y-1">
+                <div>{{ t('availability.currentModel') }}：{{ displayConfigValue(timeline.availabilityConfig?.testModel, t('availability.defaultModel')) }}</div>
+                <div>{{ t('availability.currentEndpoint') }}：{{ displayConfigValue(timeline.availabilityConfig?.testEndpoint, t('availability.defaultEndpoint')) }}</div>
+                <div>{{ t('availability.currentTimeout') }}：{{ displayConfigValue(timeline.availabilityConfig?.timeout, '15000ms') }}</div>
               </div>
 
               <!-- 时间线（如果有历史记录） -->
@@ -307,6 +379,74 @@ onUnmounted(() => {
       <!-- 无数据提示 -->
       <div v-if="platforms.length === 0" class="text-center py-12 text-[var(--mac-text-secondary)]">
         {{ t('availability.noProviders') }}
+      </div>
+    </div>
+
+    <!-- 配置编辑弹窗 -->
+    <div v-if="showConfigModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div class="bg-[var(--mac-surface)] border border-[var(--mac-border)] rounded-2xl shadow-xl w-full max-w-lg p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="text-xl font-semibold text-[var(--mac-text)]">
+              {{ t('availability.configTitle') }}
+            </h3>
+            <p class="text-sm text-[var(--mac-text-secondary)]">
+              {{ activeProvider?.providerName }} ({{ activeProvider?.platform }})
+            </p>
+          </div>
+          <button class="text-[var(--mac-text-secondary)] hover:text-[var(--mac-text)]" @click="closeConfigModal">✕</button>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-[var(--mac-text)] mb-1">{{ t('availability.field.testModel') }}</label>
+            <input
+              v-model="configForm.testModel"
+              type="text"
+              class="w-full rounded-lg border border-[var(--mac-border)] bg-[var(--mac-surface-strong)] px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--mac-accent)]"
+              :placeholder="t('availability.placeholder.testModel')"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-[var(--mac-text)] mb-1">{{ t('availability.field.testEndpoint') }}</label>
+            <input
+              v-model="configForm.testEndpoint"
+              type="text"
+              class="w-full rounded-lg border border-[var(--mac-border)] bg-[var(--mac-surface-strong)] px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--mac-accent)]"
+              :placeholder="t('availability.placeholder.testEndpoint')"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-[var(--mac-text)] mb-1">{{ t('availability.field.timeout') }}</label>
+            <input
+              v-model.number="configForm.timeout"
+              type="number"
+              min="1000"
+              class="w-full rounded-lg border border-[var(--mac-border)] bg-[var(--mac-surface-strong)] px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--mac-accent)]"
+              :placeholder="t('availability.placeholder.timeout')"
+            />
+            <p class="mt-1 text-xs text-[var(--mac-text-secondary)]">{{ t('availability.hint.timeout') }}</p>
+          </div>
+        </div>
+
+        <div class="mt-6 flex justify-end gap-3">
+          <button
+            class="px-4 py-2 rounded-lg border border-[var(--mac-border)] text-[var(--mac-text)] hover:bg-[var(--mac-border)]"
+            @click="closeConfigModal"
+          >
+            {{ t('common.cancel') }}
+          </button>
+          <button
+            class="px-4 py-2 rounded-lg bg-[var(--mac-accent)] text-white hover:opacity-90 disabled:opacity-50"
+            :disabled="savingConfig"
+            @click="saveConfig"
+          >
+            <span v-if="savingConfig">{{ t('common.saving') }}</span>
+            <span v-else>{{ t('common.save') }}</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>

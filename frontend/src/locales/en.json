@@ -47,6 +47,27 @@
       "operationalThreshold": "Operational threshold",
       "operationalThresholdHint": "Response latency below this is considered operational"
     },
+    "editConfig": "Edit Config",
+    "configTitle": "Advanced Availability Config",
+    "field": {
+      "testModel": "Test Model",
+      "testEndpoint": "Test Endpoint",
+      "timeout": "Timeout (ms)"
+    },
+    "placeholder": {
+      "testModel": "Leave blank to use platform default model",
+      "testEndpoint": "Leave blank to use platform default endpoint",
+      "timeout": "Default 15000"
+    },
+    "hint": {
+      "timeout": "Milliseconds; blank or 0 will use default 15000"
+    },
+    "default": "default",
+    "currentModel": "Current Model",
+    "currentEndpoint": "Current Endpoint",
+    "currentTimeout": "Current Timeout",
+    "defaultModel": "Platform default model",
+    "defaultEndpoint": "Platform default endpoint",
     "advancedConfig": {
       "title": "Advanced Config",
       "testModel": "Test model",
@@ -56,6 +77,11 @@
       "timeout": "Timeout",
       "timeoutHint": "Default 15 seconds"
     }
+  },
+  "common": {
+    "save": "Save",
+    "saving": "Saving...",
+    "cancel": "Cancel"
   },
   "prompts": {
     "hero": {

@@ -66,15 +66,16 @@ type HealthCheckHistory struct {
 
 // ProviderTimeline Provider 时间线（用于前端展示）
 type ProviderTimeline struct {
-	ProviderID                 int64               `json:"providerId"`
-	ProviderName               string              `json:"providerName"`
-	Platform                   string              `json:"platform"`
-	AvailabilityMonitorEnabled bool                `json:"availabilityMonitorEnabled"`
-	ConnectivityAutoBlacklist  bool                `json:"connectivityAutoBlacklist"`
-	Items                      []HealthCheckResult `json:"items"`        // 历史记录
-	Latest                     *HealthCheckResult  `json:"latest"`       // 最新一条
-	Uptime                     float64             `json:"uptime"`       // 可用率
-	AvgLatencyMs               int                 `json:"avgLatencyMs"` // 平均延迟
+	ProviderID                 int64                `json:"providerId"`
+	ProviderName               string               `json:"providerName"`
+	Platform                   string               `json:"platform"`
+	AvailabilityMonitorEnabled bool                 `json:"availabilityMonitorEnabled"`
+	ConnectivityAutoBlacklist  bool                 `json:"connectivityAutoBlacklist"`
+	AvailabilityConfig         *AvailabilityConfig  `json:"availabilityConfig,omitempty"` // 高级配置
+	Items                      []HealthCheckResult  `json:"items"`                        // 历史记录
+	Latest                     *HealthCheckResult   `json:"latest"`                       // 最新一条
+	Uptime                     float64              `json:"uptime"`                       // 可用率
+	AvgLatencyMs               int                  `json:"avgLatencyMs"`                 // 平均延迟
 }
 
 // AvailabilityFailureCounter 可用性失败计数器（独立于真实请求）
@@ -212,6 +213,7 @@ func (hcs *HealthCheckService) GetLatestResults() (map[string][]ProviderTimeline
 				Platform:                   platform,
 				AvailabilityMonitorEnabled: p.AvailabilityMonitorEnabled,
 				ConnectivityAutoBlacklist:  p.ConnectivityAutoBlacklist,
+				AvailabilityConfig:         p.AvailabilityConfig,
 			}
 
 			// 从批量查询结果中获取该 provider 的历史记录

@@ -47,6 +47,27 @@
       "operationalThreshold": "正常状态阈值",
       "operationalThresholdHint": "响应延迟小于此值判定为正常"
     },
+    "editConfig": "编辑配置",
+    "configTitle": "可用性高级配置",
+    "field": {
+      "testModel": "测试模型",
+      "testEndpoint": "测试端点",
+      "timeout": "超时时间（毫秒）"
+    },
+    "placeholder": {
+      "testModel": "留空使用平台默认模型",
+      "testEndpoint": "留空使用平台默认端点",
+      "timeout": "默认 15000"
+    },
+    "hint": {
+      "timeout": "单位毫秒，留空或 0 将使用默认 15000"
+    },
+    "default": "默认",
+    "currentModel": "当前模型",
+    "currentEndpoint": "当前端点",
+    "currentTimeout": "当前超时",
+    "defaultModel": "平台默认模型",
+    "defaultEndpoint": "平台默认端点",
     "advancedConfig": {
       "title": "高级配置",
       "testModel": "测试模型",
@@ -56,6 +77,11 @@
       "timeout": "超时时间",
       "timeoutHint": "默认 15 秒"
     }
+  },
+  "common": {
+    "save": "保存",
+    "saving": "保存中...",
+    "cancel": "取消"
   },
   "prompts": {
     "hero": {
