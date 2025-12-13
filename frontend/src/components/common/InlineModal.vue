@@ -59,10 +59,7 @@ const panelRef = ref<HTMLElement | null>(null)
 const closeButtonRef = ref<HTMLButtonElement | null>(null)
 let lastActiveElement: Element | null = null
 
-const emitClose = () => {
-  alert('[DEBUG] InlineModal emitClose called!')
-  emit('close')
-}
+const emitClose = () => emit('close')
 
 const getFocusableElements = (): HTMLElement[] => {
   if (!panelRef.value) return []
@@ -132,15 +129,11 @@ const unlockScroll = () => {
 watch(
   () => props.open,
   (open) => {
-    console.log('[DEBUG InlineModal] open changed:', open)
     if (open) {
       lastActiveElement = document.activeElement
       window.addEventListener('keydown', onKeyDown, true)
       lockScroll()
-      nextTick(() => {
-        console.log('[DEBUG InlineModal] focusing close button')
-        closeButtonRef.value?.focus()
-      })
+      nextTick(() => closeButtonRef.value?.focus())
     } else {
       window.removeEventListener('keydown', onKeyDown, true)
       unlockScroll()

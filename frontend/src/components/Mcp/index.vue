@@ -189,7 +189,7 @@
           type="button"
           class="modal-tab"
           :class="{ active: modalMode === 'form' }"
-          @click="switchModalMode('form')"
+          @click.stop.prevent="switchModalMode('form')"
         >
           {{ t('components.mcp.jsonImport.tabForm') }}
         </button>
@@ -197,7 +197,7 @@
           type="button"
           class="modal-tab"
           :class="{ active: modalMode === 'json' }"
-          @click="switchModalMode('json')"
+          @click.stop.prevent="switchModalMode('json')"
         >
           {{ t('components.mcp.jsonImport.tabJson') }}
         </button>
@@ -304,6 +304,10 @@
 
       <!-- JSON 导入模式 -->
       <div v-else-if="modalMode === 'json'" class="json-import-section">
+        <!-- 醒目测试文本 -->
+        <div style="background: red; color: white; padding: 20px; font-size: 24px; font-weight: bold;">
+          JSON 模式已激活！如果你能看到这段红色文字，说明渲染正常。
+        </div>
         <!-- JSON 输入区 -->
         <div v-if="!jsonParseResult" class="json-input-area">
           <!-- 说明 + 示例按钮 -->
@@ -529,12 +533,7 @@ const focusJsonTextarea = () => {
 watch(
   [() => modalState.open, modalMode, jsonParseResult, jsonParsing],
   ([open, mode, result, parsing]) => {
-    console.log('[DEBUG] watch triggered:', { open, mode, result, parsing })
-    if (!open || mode !== 'json' || result !== null || parsing) {
-      console.log('[DEBUG] watch: conditions not met, skipping focus')
-      return
-    }
-    console.log('[DEBUG] watch: calling focusJsonTextarea')
+    if (!open || mode !== 'json' || result !== null || parsing) return
     focusJsonTextarea()
   },
   { flush: 'post' }
@@ -678,7 +677,6 @@ const onPlatformToggle = async (server: McpServer, platform: McpPlatform, event:
 }
 
 const openCreateModal = () => {
-  console.log('[DEBUG] openCreateModal called')
   modalState.open = true
   modalState.editingName = ''
   modalState.form = createEmptyForm()
@@ -686,7 +684,6 @@ const openCreateModal = () => {
   // 重置模式和 JSON 导入状态
   modalMode.value = 'form'
   resetJsonImport()
-  console.log('[DEBUG] openCreateModal done:', { open: modalState.open, mode: modalMode.value })
 }
 
 const openEditModal = (server: McpServer) => {
@@ -723,7 +720,6 @@ const closeModal = () => {
 
 // 切换 Modal 模式
 const switchModalMode = (mode: ModalMode) => {
-  alert(`[DEBUG] switchModalMode: ${modalMode.value} -> ${mode}`)
   modalMode.value = mode
   jsonError.value = ''
   modalError.value = ''
