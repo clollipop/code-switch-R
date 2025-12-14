@@ -1,15 +1,29 @@
 <template>
   <Teleport to="body">
     <Transition name="fullscreen-panel-slide">
-      <div v-if="open" class="panel-container">
+      <div
+        v-if="open"
+        ref="panelRef"
+        class="panel-container"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="titleId"
+        tabindex="-1"
+      >
         <!-- Header -->
         <header class="panel-header">
-          <button class="back-button" type="button" aria-label="Close Panel" @click="handleClose">
+          <button
+            ref="closeButtonRef"
+            class="back-button"
+            type="button"
+            :aria-label="closeLabel"
+            @click="handleClose"
+          >
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="15 18 9 12 15 6"></polyline>
             </svg>
           </button>
-          <h2 class="panel-title">{{ title }}</h2>
+          <h2 :id="titleId" class="panel-title">{{ title }}</h2>
           <div class="header-spacer"></div>
         </header>
 
@@ -28,33 +42,65 @@
 </template>
 
 <script setup lang="ts">
-import { watch, onUnmounted } from 'vue'
+import { ref, watch, onBeforeUnmount, nextTick } from 'vue'
 
-const props = defineProps<{
-  open: boolean
-  title: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    open: boolean
+    title: string
+    closeLabel?: string
+  }>(),
+  { closeLabel: 'Close' },
+)
 
 const emit = defineEmits<{
   (e: 'close'): void
 }>()
 
+const titleId = `panel-title-${Math.random().toString(36).slice(2, 9)}`
+const panelRef = ref<HTMLElement | null>(null)
+const closeButtonRef = ref<HTMLButtonElement | null>(null)
+let lastActiveElement: Element | null = null
+
 const handleClose = () => {
   emit('close')
+}
+
+const onKeyDown = (e: KeyboardEvent) => {
+  if (!props.open) return
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    e.stopPropagation()
+    handleClose()
+  }
 }
 
 watch(
   () => props.open,
   (isOpen) => {
     if (isOpen) {
+      lastActiveElement = document.activeElement
       document.body.style.overflow = 'hidden'
+      window.addEventListener('keydown', onKeyDown, true)
+      nextTick(() => closeButtonRef.value?.focus())
     } else {
       document.body.style.overflow = ''
+      window.removeEventListener('keydown', onKeyDown, true)
+      if (lastActiveElement instanceof HTMLElement) {
+        try {
+          lastActiveElement.focus()
+        } catch {
+          /* ignore */
+        }
+      }
+      lastActiveElement = null
     }
   },
+  { immediate: true },
 )
 
-onUnmounted(() => {
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeyDown, true)
   document.body.style.overflow = ''
 })
 </script>
