@@ -483,13 +483,11 @@ const confirmState = reactive<{ open: boolean; target: McpServer | null }>({
 const showBatchImport = ref(false)
 
 const openBatchImport = () => {
-  console.log('[MCP] openBatchImport called, setting showBatchImport to true')
+  showToast('[DEBUG] openBatchImport 被调用', 'success')
   showBatchImport.value = true
-  console.log('[MCP] showBatchImport.value is now:', showBatchImport.value)
 }
 
 const closeBatchImport = () => {
-  console.log('[MCP] closeBatchImport called')
   showBatchImport.value = false
 }
 
