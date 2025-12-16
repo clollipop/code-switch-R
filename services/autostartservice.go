@@ -3,7 +3,6 @@ package services
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -96,7 +95,7 @@ func (as *AutoStartService) isEnabledWindows() (bool, error) {
 	regExe := windowsRegExe()
 
 	// 1. 检查 Run 键是否存在
-	cmd := exec.Command(regExe, "query", windowsRunKey, "/v", windowsAutoStartValue)
+	cmd := hideWindowCmd(regExe, "query", windowsRunKey, "/v", windowsAutoStartValue)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		lowerOut := strings.ToLower(string(out))
@@ -122,7 +121,7 @@ func (as *AutoStartService) isEnabledWindows() (bool, error) {
 
 	// 3. 检查 StartupApproved 是否禁用了该项
 	// Windows 10/11 在任务管理器禁用启动项时会在此处写入禁用标记
-	approvedCmd := exec.Command(regExe, "query", windowsStartupApprovedKey, "/v", windowsAutoStartValue)
+	approvedCmd := hideWindowCmd(regExe, "query", windowsStartupApprovedKey, "/v", windowsAutoStartValue)
 	approvedOut, err := approvedCmd.CombinedOutput()
 	if err == nil {
 		// 解析 REG_BINARY 输出，格式类似: "CodeSwitch    REG_BINARY    030000..."
@@ -158,7 +157,7 @@ func (as *AutoStartService) enableWindows() error {
 
 	quotedPath := fmt.Sprintf(`"%s"`, exePath)
 	regExe := windowsRegExe()
-	cmd := exec.Command(regExe, "add", windowsRunKey, "/v", windowsAutoStartValue,
+	cmd := hideWindowCmd(regExe, "add", windowsRunKey, "/v", windowsAutoStartValue,
 		"/t", "REG_SZ", "/d", quotedPath, "/f")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to add registry key: %w, output: %s",
@@ -166,13 +165,13 @@ func (as *AutoStartService) enableWindows() error {
 	}
 
 	// Windows 10/11: clear StartupApproved disabled state
-	_ = exec.Command(regExe, "delete", windowsStartupApprovedKey, "/v", windowsAutoStartValue, "/f").Run()
+	_ = hideWindowCmd(regExe, "delete", windowsStartupApprovedKey, "/v", windowsAutoStartValue, "/f").Run()
 	return nil
 }
 
 func (as *AutoStartService) disableWindows() error {
 	regExe := windowsRegExe()
-	cmd := exec.Command(regExe, "delete", windowsRunKey, "/v", windowsAutoStartValue, "/f")
+	cmd := hideWindowCmd(regExe, "delete", windowsRunKey, "/v", windowsAutoStartValue, "/f")
 	_ = cmd.Run()
 	return nil
 }

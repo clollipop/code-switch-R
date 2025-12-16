@@ -204,7 +204,6 @@
         </button>
       </div>
 
-      <!-- 表单模式 -->
       <form v-if="modalMode === 'form'" class="vendor-form" @submit.prevent="submitModal">
         <div class="form-row">
           <label class="form-field">
@@ -366,7 +365,6 @@
         </div>
       </form>
 
-      <!-- JSON 导入模式 -->
       <div v-else-if="modalMode === 'json'" class="json-import-section">
         <!-- JSON 输入区 -->
         <div v-if="!jsonParseResult" class="json-input-area">

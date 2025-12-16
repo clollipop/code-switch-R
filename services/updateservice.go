@@ -1481,7 +1481,7 @@ func (us *UpdateService) RestartApp() error {
 
 	switch runtime.GOOS {
 	case "windows":
-		cmd := exec.Command(executable)
+		cmd := hideWindowCmd(executable)
 		if err := cmd.Start(); err != nil {
 			return fmt.Errorf("启动新进程失败: %w", err)
 		}
