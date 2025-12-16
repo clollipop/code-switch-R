@@ -104,7 +104,7 @@ const onKeyDown = (e: KeyboardEvent) => {
 watch(
   () => props.open,
   (isOpen) => {
-    showToast(`[DEBUG] FullScreenPanel watch: open=${isOpen}, title=${props.title}`, 'info')
+    showToast(`[DEBUG] FullScreenPanel watch: open=${isOpen}, title=${props.title}`, 'success')
     if (isOpen) {
       lastActiveElement = document.activeElement
       document.body.style.overflow = 'hidden'
