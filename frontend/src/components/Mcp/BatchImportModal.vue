@@ -1,5 +1,6 @@
 <template>
   <FullScreenPanel
+    class="mcp-fullscreen-panel"
     :open="open"
     :title="t('components.mcp.import.title')"
     @close="handleClose"
