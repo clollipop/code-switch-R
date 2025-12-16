@@ -3,6 +3,7 @@
     <Transition name="fullscreen-panel-slide">
       <div
         v-if="open"
+        v-bind="$attrs"
         ref="panelRef"
         class="panel-container"
         role="dialog"
