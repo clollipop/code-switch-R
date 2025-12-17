@@ -5,11 +5,11 @@
     @close="handleClose"
   >
     <div class="import-container">
-      <p>TEST: 只测 i18n placeholder</p>
+      <p>TEST: 简单 i18n key</p>
       <div v-if="step === 'input'">
         <BaseTextarea
           v-model="jsonInput"
-          :placeholder="t('components.mcp.import.placeholder')"
+          :placeholder="t('components.mcp.import.inputDesc')"
           rows="10"
         />
         <BaseButton @click="handleClose">关闭</BaseButton>
