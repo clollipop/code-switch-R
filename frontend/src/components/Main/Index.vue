@@ -2756,9 +2756,10 @@ const submitModal = async () => {
     await persistProviders(modalState.tabId)
   }
 
-  // 保存 CLI 配置（如果有编辑）
+  // 保存 CLI 配置（仅支持 claude/codex/gemini 平台）
   const cliConfig = modalState.form.cliConfig
-  if (cliConfig && Object.keys(cliConfig).length > 0) {
+  const supportedPlatforms: CLIPlatform[] = ['claude', 'codex', 'gemini']
+  if (cliConfig && Object.keys(cliConfig).length > 0 && supportedPlatforms.includes(modalState.tabId as CLIPlatform)) {
     try {
       await saveCLIConfig(modalState.tabId as CLIPlatform, cliConfig)
     } catch (error) {

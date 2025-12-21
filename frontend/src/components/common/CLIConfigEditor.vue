@@ -148,15 +148,16 @@
           <div v-else class="cli-fields">
             <div
               v-for="(field, index) in customFields"
-              :key="index"
+              :key="field.id"
               class="cli-custom-field"
             >
               <input
                 type="text"
-                :value="field.key"
+                :value="field.keyDraft"
                 class="cli-field-input cli-key-input"
                 :placeholder="t('components.cliConfig.keyPlaceholder')"
                 @input="updateCustomFieldKey(index, ($event.target as HTMLInputElement).value)"
+                @blur="commitCustomFieldKey(index)"
               />
               <input
                 type="text"
@@ -354,7 +355,10 @@ const loading = ref(false)
 const config = ref<CLIConfig | null>(null)
 const editableValues = ref<Record<string, any>>({})
 const isGlobalTemplate = ref(false)
-const customFields = ref<Array<{ key: string; value: string }>>([])
+type CustomField = { id: string; key: string; keyDraft: string; value: string }
+const customFields = ref<CustomField[]>([])
+let customFieldIdSeed = 0
+const newCustomFieldId = () => `custom-field-${Date.now()}-${customFieldIdSeed++}`
 const previewExpanded = ref(false)
 const previewEditable = ref(false)
 const previewSaving = ref(false)
@@ -749,7 +753,7 @@ const emitChanges = () => {
 // ========== 自定义字段管理 ==========
 
 const addCustomField = () => {
-  customFields.value.push({ key: '', value: '' })
+  customFields.value.push({ id: newCustomFieldId(), key: '', keyDraft: '', value: '' })
 }
 
 const removeCustomField = (index: number) => {
@@ -763,63 +767,134 @@ const removeCustomField = (index: number) => {
 }
 
 const updateCustomFieldKey = (index: number, newKey: string) => {
+  customFields.value[index].keyDraft = newKey
+}
+
+const commitCustomFieldKey = (index: number) => {
   const field = customFields.value[index]
   const oldKey = field.key
-  const normalizedKey = newKey.trim()
+  const normalizedKey = field.keyDraft.trim()
 
-  // 空 key 直接清空并同步
+  // 未变化：只做 trim 同步
+  if (normalizedKey === oldKey) {
+    if (field.keyDraft !== normalizedKey) {
+      field.keyDraft = normalizedKey
+    }
+    return
+  }
+
+  // 空 key：删除旧 key，但保留该行
   if (!normalizedKey) {
-    // 确保从 editableValues 中删除旧 key，防止残留
     if (oldKey && editableValues.value[oldKey] !== undefined) {
       delete editableValues.value[oldKey]
     }
     field.key = ''
+    field.keyDraft = ''
     emitChanges()
     return
   }
 
-  // 检查是否与锁定字段冲突
+  // 只在提交时校验
   if (lockedFieldKeys.value.has(normalizedKey)) {
     showToast(t('components.cliConfig.keyConflictLocked'), 'error')
+    field.keyDraft = oldKey
     return
   }
-
-  // 检查是否与预置字段冲突
   if (presetFieldKeys.value.has(normalizedKey)) {
     showToast(t('components.cliConfig.keyConflictPreset'), 'error')
+    field.keyDraft = oldKey
     return
   }
-
-  // 检查是否与其他自定义字段重复
   const duplicate = customFields.value.some((f, i) => i !== index && f.key === normalizedKey)
   if (duplicate) {
     showToast(t('components.cliConfig.keyDuplicate'), 'error')
+    field.keyDraft = oldKey
     return
   }
 
-  // 如果旧 key 存在，从 editableValues 中删除
   if (oldKey && editableValues.value[oldKey] !== undefined) {
     delete editableValues.value[oldKey]
   }
 
   field.key = normalizedKey
+  field.keyDraft = normalizedKey
   emitChanges()
 }
 
 const updateCustomFieldValue = (index: number, value: string) => {
-  customFields.value[index].value = value
+  const field = customFields.value[index]
+  field.value = value
+  // key 为空表示仍是未提交的草稿行：不向上游同步，避免触发 watch→extract 导致行丢失
+  if (!field.key.trim()) {
+    return
+  }
   emitChanges()
 }
 
 // 从 editableValues 中提取自定义字段（不在预置列表中的）
 const extractCustomFields = () => {
-  const custom: Array<{ key: string; value: string }> = []
+  const existing = customFields.value.slice()
+
+  // 1) 复用已存在字段的 id（按已提交 key 映射）
+  const existingByKey = new Map<string, CustomField>()
+  existing.forEach((field) => {
+    const key = field.key.trim()
+    if (key && !existingByKey.has(key)) {
+      existingByKey.set(key, field)
+    }
+  })
+
+  // 2) 保留空 key 的草稿行（避免 blur 清空后被 watch→extract 吃掉）
+  const draftRows = existing.filter((field) => !field.key.trim())
+
+  // 3) 从 editableValues 中提取自定义字段 key
+  const extractedKeys: string[] = []
   for (const key in editableValues.value) {
-    // 跳过预置字段和嵌套对象（如 env）
-    if (!presetFieldKeys.value.has(key) && typeof editableValues.value[key] !== 'object') {
-      custom.push({ key, value: String(editableValues.value[key]) })
+    if (!key) continue
+    const val = editableValues.value[key]
+    // 跳过预置/锁定字段和嵌套对象（如 env）；允许 null 值作为普通值
+    const isObjectLike = typeof val === 'object' && val !== null
+    if (!presetFieldKeys.value.has(key) && !lockedFieldKeys.value.has(key) && !isObjectLike) {
+      extractedKeys.push(key)
     }
   }
+
+  const remaining = new Set(extractedKeys)
+  const custom: CustomField[] = []
+
+  // 4) 先按现有顺序保留仍存在的字段，确保顺序与 id 稳定
+  existing.forEach((field) => {
+    const key = field.key.trim()
+    if (!key) return
+    if (!remaining.has(key)) return
+    custom.push({
+      ...field,
+      value: String(editableValues.value[key]),
+    })
+    remaining.delete(key)
+  })
+
+  // 5) 再追加新增字段
+  remaining.forEach((key) => {
+    const reused = existingByKey.get(key)
+    if (reused) {
+      custom.push({
+        ...reused,
+        value: String(editableValues.value[key]),
+      })
+      return
+    }
+    custom.push({
+      id: newCustomFieldId(),
+      key,
+      keyDraft: key,
+      value: String(editableValues.value[key]),
+    })
+  })
+
+  // 6) 最后追加空 key 草稿行
+  draftRows.forEach((row) => custom.push(row))
+
   customFields.value = custom
 }
 
