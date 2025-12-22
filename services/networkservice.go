@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -185,7 +184,7 @@ func (ns *NetworkService) DetectWSL() WSLDetection {
 	}
 
 	// 执行 wsl --list --quiet 获取发行版列表
-	cmd := exec.Command("wsl", "--list", "--quiet")
+	cmd := hideWindowCmd("wsl", "--list", "--quiet")
 	output, err := cmd.Output()
 	if err != nil {
 		return result
@@ -223,7 +222,7 @@ func (ns *NetworkService) getWSLHostAddressInternal() string {
 
 	// 方法 2: 获取 Windows 主机的 WSL 虚拟网络适配器 IP
 	// 执行 ipconfig 并解析 vEthernet (WSL) 的 IP
-	cmd := exec.Command("ipconfig")
+	cmd := hideWindowCmd("ipconfig")
 	output, err := cmd.Output()
 	if err != nil {
 		return ""
@@ -902,7 +901,7 @@ trap - EXIT
 // runWSLCommand 在指定的 WSL 发行版中执行命令
 func (ns *NetworkService) runWSLCommand(distro, script string) error {
 	// 使用 wsl -d <distro> bash -c "<script>"
-	cmd := exec.Command("wsl", "-d", distro, "bash", "-c", script)
+	cmd := hideWindowCmd("wsl", "-d", distro, "bash", "-c", script)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%v: %s", err, string(output))
@@ -936,26 +935,26 @@ func (ns *NetworkService) GetWSLConfigStatus() map[string]map[string]bool {
 
 // checkWSLClaudeConfigured 检查 WSL 中 Claude Code 是否已配置
 func (ns *NetworkService) checkWSLClaudeConfigured(distro string) bool {
-	cmd := exec.Command("wsl", "-d", distro, "bash", "-lc", "test -f ~/.claude/settings.json")
+	cmd := hideWindowCmd("wsl", "-d", distro, "bash", "-lc", "test -f ~/.claude/settings.json")
 	return cmd.Run() == nil
 }
 
 // checkWSLCodexConfigured 检查 WSL 中 Codex 是否已配置
 func (ns *NetworkService) checkWSLCodexConfigured(distro string) bool {
-	cmd := exec.Command("wsl", "-d", distro, "bash", "-lc", "test -f ~/.codex/config.toml")
+	cmd := hideWindowCmd("wsl", "-d", distro, "bash", "-lc", "test -f ~/.codex/config.toml")
 	return cmd.Run() == nil
 }
 
 // checkWSLGeminiConfigured 检查 WSL 中 Gemini CLI 是否已配置
 func (ns *NetworkService) checkWSLGeminiConfigured(distro string) bool {
-	cmd := exec.Command("wsl", "-d", distro, "bash", "-lc", "test -f ~/.gemini/.env")
+	cmd := hideWindowCmd("wsl", "-d", distro, "bash", "-lc", "test -f ~/.gemini/.env")
 	return cmd.Run() == nil
 }
 
 // ReadWSLResolveConf 从 WSL 中读取 /etc/resolv.conf 获取宿主机 IP
 // 这是更准确的方法，因为 WSL2 的 nameserver 指向宿主机
 func (ns *NetworkService) ReadWSLResolveConf(distro string) string {
-	cmd := exec.Command("wsl", "-d", distro, "cat", "/etc/resolv.conf")
+	cmd := hideWindowCmd("wsl", "-d", distro, "cat", "/etc/resolv.conf")
 	output, err := cmd.Output()
 	if err != nil {
 		return ""

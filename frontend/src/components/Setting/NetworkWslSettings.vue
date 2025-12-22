@@ -1,56 +1,60 @@
 <template>
-  <section>
-    <h2 class="mac-section-title">{{ t('settings.network.title') }}</h2>
-    <div class="mac-panel">
-      <!-- Listen Mode Selection -->
-      <ListItem :label="t('settings.network.listenMode')">
-        <select
-          v-model="listenMode"
-          class="mac-select"
-          @change="handleListenModeChange"
+  <div class="network-wsl-settings">
+    <!-- Network Settings Section -->
+    <section>
+      <h2 class="mac-section-title">{{ t('settings.network.title') }}</h2>
+      <div class="mac-panel">
+        <!-- Listen Mode Selection -->
+        <ListItem :label="t('settings.network.listenMode')">
+          <select
+            v-model="listenMode"
+            class="mac-select"
+            @change="handleListenModeChange"
+          >
+            <option value="localhost">{{ t('settings.network.modes.localhost') }}</option>
+            <option value="wsl_auto">{{ t('settings.network.modes.wslAuto') }}</option>
+            <option value="lan">{{ t('settings.network.modes.lan') }}</option>
+            <option value="custom">{{ t('settings.network.modes.custom') }}</option>
+          </select>
+        </ListItem>
+
+        <!-- Custom Address Input (only shown when custom mode) -->
+        <ListItem
+          v-if="listenMode === 'custom'"
+          :label="t('settings.network.customAddress')"
         >
-          <option value="localhost">{{ t('settings.network.modes.localhost') }}</option>
-          <option value="wsl_auto">{{ t('settings.network.modes.wslAuto') }}</option>
-          <option value="lan">{{ t('settings.network.modes.lan') }}</option>
-          <option value="custom">{{ t('settings.network.modes.custom') }}</option>
-        </select>
-      </ListItem>
+          <input
+            v-model="customAddress"
+            type="text"
+            class="mac-input"
+            placeholder="0.0.0.0:18100"
+            @blur="handleCustomAddressChange"
+          />
+        </ListItem>
 
-      <!-- Custom Address Input (only shown when custom mode) -->
-      <ListItem
-        v-if="listenMode === 'custom'"
-        :label="t('settings.network.customAddress')"
-      >
-        <input
-          v-model="customAddress"
-          type="text"
-          class="mac-input"
-          placeholder="0.0.0.0:18100"
-          @blur="handleCustomAddressChange"
-        />
-      </ListItem>
+        <!-- LAN Security Warning -->
+        <div v-if="listenMode === 'lan'" class="security-warning">
+          <div class="warning-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="warning-content">
+            <p class="warning-title">{{ t('settings.network.lanWarningTitle') }}</p>
+            <p class="warning-text">{{ t('settings.network.lanWarningText') }}</p>
+          </div>
+        </div>
 
-      <!-- LAN Security Warning -->
-      <div v-if="listenMode === 'lan'" class="security-warning">
-        <div class="warning-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </div>
-        <div class="warning-content">
-          <p class="warning-title">{{ t('settings.network.lanWarningTitle') }}</p>
-          <p class="warning-text">{{ t('settings.network.lanWarningText') }}</p>
-        </div>
+        <!-- Current Listen Address Display -->
+        <ListItem :label="t('settings.network.currentAddress')">
+          <span class="address-display">{{ currentListenAddress }}</span>
+        </ListItem>
       </div>
-
-      <!-- Current Listen Address Display -->
-      <ListItem :label="t('settings.network.currentAddress')">
-        <span class="address-display">{{ currentListenAddress }}</span>
-      </ListItem>
-    </div>
+    </section>
 
     <!-- WSL Configuration Section -->
-    <h2 class="mac-section-title">{{ t('settings.network.wslTitle') }}</h2>
+    <section>
+      <h2 class="mac-section-title">{{ t('settings.network.wslTitle') }}</h2>
     <div class="mac-panel">
       <!-- WSL Auto-Config Toggle -->
       <ListItem :label="t('settings.network.wslAutoConfig')">
@@ -142,7 +146,8 @@
         </p>
       </div>
     </div>
-  </section>
+    </section>
+  </div>
 </template>
 
 <script setup lang="ts">
