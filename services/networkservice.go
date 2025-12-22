@@ -940,8 +940,9 @@ trap - EXIT
 
 // runWSLCommand 在指定的 WSL 发行版中执行命令
 func (ns *NetworkService) runWSLCommand(distro, script string) error {
-	// 使用 wsl -d <distro> bash -c "<script>"
-	cmd := hideWindowCmd("wsl", "-d", distro, "bash", "-c", script)
+	// 通过 stdin 传递脚本，避免 Windows 命令行参数转义问题
+	cmd := hideWindowCmd("wsl", "-d", distro, "bash")
+	cmd.Stdin = strings.NewReader(script)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%v: %s", err, string(output))
