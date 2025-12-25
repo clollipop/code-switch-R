@@ -172,8 +172,10 @@ func (s *GeminiService) UpdateProvider(provider GeminiProvider) error {
 
 	for i, p := range s.providers {
 		if p.ID == provider.ID {
-			// 保留原有的 API Key（不允许通过更新修改）
-			provider.APIKey = p.APIKey
+			// 允许更新 API Key；若未提供（空/全空白）则保留旧值，避免误清空
+			if strings.TrimSpace(provider.APIKey) == "" {
+				provider.APIKey = p.APIKey
+			}
 			s.providers[i] = provider
 			return s.saveProviders()
 		}
