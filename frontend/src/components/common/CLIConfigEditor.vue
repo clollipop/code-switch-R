@@ -1312,8 +1312,10 @@ const handleApplyCurrentEdit = async (file: CLIConfigFile, index: number) => {
   const text = currentEditingContent.value[key] ?? file.content ?? ''
   // 缓存当前平台，防止保存过程中切换平台导致竞态
   const platform = props.platform
+  // 保存文件路径，用于后续从 nextConfig 中精确查找最新内容
+  const targetPath = file.path
 
-  if (!file.path) {
+  if (!targetPath) {
     currentErrors.value[key] = t('components.cliConfig.previewUnknownPath')
     showToast(t('components.cliConfig.previewUnknownPath'), 'error')
     return
@@ -1324,7 +1326,7 @@ const handleApplyCurrentEdit = async (file: CLIConfigFile, index: number) => {
 
   currentSaving.value = true
   try {
-    await saveCLIConfigFileContent(platform, file.path, text)
+    await saveCLIConfigFileContent(platform, targetPath, text)
     // 校验平台是否在保存过程中发生变化
     if (platform !== props.platform) {
       console.warn('[CLIConfigEditor] Platform changed during save, skipping state update')
@@ -1341,8 +1343,20 @@ const handleApplyCurrentEdit = async (file: CLIConfigFile, index: number) => {
     editableValues.value = { ...(nextConfig.editable || {}) }
     extractCustomFields()
     emitChanges()
-    // 重置当前文件的编辑内容
-    currentEditingContent.value[key] = currentFiles.value.find((f, i) => getCurrentKey(f, i) === key)?.content || ''
+
+    // 修复：直接从 nextConfig 提取最新内容，避免依赖 currentFiles computed 的重新计算时序
+    // 原问题：依赖 currentFiles.value.find() 可能存在对象引用或时序问题，导致获取到旧内容
+    let newContent = ''
+    // 1. 优先从 rawFiles 中精确查找（最可靠，直接来源于磁盘读取）
+    const targetFile = nextConfig.rawFiles?.find(f => f.path === targetPath)
+    if (targetFile) {
+      newContent = targetFile.content || ''
+    } else if (nextConfig.filePath === targetPath) {
+      // 2. 回退到 rawContent（兼容老版本后端或单文件场景）
+      newContent = nextConfig.rawContent || ''
+    }
+
+    currentEditingContent.value[key] = newContent
     delete currentErrors.value[key]
     showToast(t('components.cliConfig.previewApplySuccess'), 'success')
   } catch (error) {
