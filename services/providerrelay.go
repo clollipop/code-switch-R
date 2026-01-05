@@ -349,6 +349,13 @@ func (prs *ProviderRelayService) proxyHandler(kind string, endpoint string) gin.
 			c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		}
 
+		if fixedBody, fixed, err := FixIncompleteToolUse(bodyBytes); err != nil {
+			fmt.Printf("[WARN] 修复 tool_use 失败: %v\n", err)
+		} else if fixed {
+			bodyBytes = fixedBody
+			c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		}
+
 		isStream := gjson.GetBytes(bodyBytes, "stream").Bool()
 		requestedModel := gjson.GetBytes(bodyBytes, "model").String()
 
@@ -1602,6 +1609,14 @@ func (prs *ProviderRelayService) customCliProxyHandler() gin.HandlerFunc {
 				return
 			}
 			bodyBytes = data
+			c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		}
+
+		// 修复不完整的 tool_use（中转站切换场景）
+		if fixedBody, fixed, err := FixIncompleteToolUse(bodyBytes); err != nil {
+			fmt.Printf("[CustomCLI][WARN] 修复 tool_use 失败: %v\n", err)
+		} else if fixed {
+			bodyBytes = fixedBody
 			c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		}
 
